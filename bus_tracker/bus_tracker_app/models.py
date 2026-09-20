@@ -17,3 +17,9 @@ class Monitor(models.Model):
 
     def __str__(self):
         return self.name
+
+class Route:
+    route_name = models.CharField()
+
+    def __str__(self):
+        return self.route_name
