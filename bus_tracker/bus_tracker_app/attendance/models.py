@@ -1,9 +1,5 @@
-from django.db import models
-from .models import Student
-from ..tracking.models import Trip
+"""Compatibility imports for the attendance domain."""
 
-class StudentAttendance:
-    student = models.ForeignKey(Student)
-    trip = models.ForeignKey(Trip)
-    presence = models.BooleanField()
+from ..models import Route, Student, StudentAttendance
 
+__all__ = ["Route", "Student", "StudentAttendance"]
