@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 
 from .models import Bus, Monitor, Route, Stop, Student, StudentAttendance, Trip
 
@@ -12,6 +13,16 @@ class StyledModelForm(forms.ModelForm):
             field.widget.attrs.setdefault(
                 "class",
                 "mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100",
+            )
+
+
+class StyledAuthenticationForm(AuthenticationForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = (
+                "mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 "
+                "text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100"
             )
 
 
@@ -40,7 +51,7 @@ class BusForm(StyledModelForm):
 class MonitorForm(StyledModelForm):
     class Meta:
         model = Monitor
-        fields = ["name", "route"]
+        fields = ["name", "route", "user"]
 
 
 class StudentForm(StyledModelForm):
@@ -70,6 +81,22 @@ class TripForm(StyledModelForm):
         if route and students and students.exclude(route=route).exists():
             self.add_error("students", "Every selected student must belong to the selected route.")
         return cleaned_data
+
+
+class PrepareTripForm(StyledModelForm):
+    """Collect only choices needed to prepare a dated trip for a known route."""
+
+    class Meta:
+        model = Trip
+        fields = ["bus", "monitor", "date"]
+        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, route, assigned_monitor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["monitor"].queryset = route.monitors.all()
+        if assigned_monitor is not None:
+            self.fields["monitor"].initial = assigned_monitor
+            self.fields["monitor"].disabled = True
 
 
 class StudentAttendanceForm(StyledModelForm):

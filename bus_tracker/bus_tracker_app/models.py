@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models
 
 
@@ -45,6 +46,13 @@ class Bus(models.Model):
 class Monitor(models.Model):
     name = models.CharField(max_length=100)
     route = models.ForeignKey(Route, on_delete=models.PROTECT, related_name="monitors")
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="monitor_profile",
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         ordering = ["name"]
@@ -80,6 +88,10 @@ class Trip(models.Model):
     class Meta:
         ordering = ["-date", "route__route_name"]
         constraints = [models.UniqueConstraint(fields=["route", "date"], name="one_trip_per_route_day")]
+        permissions = [
+            ("prepare_trip", "Can prepare trips"),
+            ("manage_operational_data", "Can manage operational data"),
+        ]
 
     def clean(self):
         if self.route_id and self.monitor_id and self.monitor.route_id != self.route_id:
