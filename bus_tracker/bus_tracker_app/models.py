@@ -1,6 +1,20 @@
-from django.core.exceptions import ValidationError
+import math
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
+
+
+def validate_latitude(value):
+    if not math.isfinite(value) or not -90 <= value <= 90:
+        raise ValidationError("Latitude must be a finite number between -90 and 90.")
+
+
+def validate_longitude(value):
+    if not math.isfinite(value) or not -180 <= value <= 180:
+        raise ValidationError("Longitude must be a finite number between -180 and 180.")
 
 
 class Route(models.Model):
@@ -79,15 +93,28 @@ class Student(models.Model):
 
 
 class Trip(models.Model):
+    class Leg(models.IntegerChoices):
+        TO_SCHOOL = 1, "To school"
+        FROM_SCHOOL = 2, "From school"
+
+    class Status(models.TextChoices):
+        PREPARED = "prepared", "Prepared"
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+
     route = models.ForeignKey(Route, on_delete=models.PROTECT, related_name="trips")
     bus = models.ForeignKey(Bus, on_delete=models.PROTECT, related_name="trips")
     monitor = models.ForeignKey(Monitor, on_delete=models.PROTECT, related_name="trips")
     date = models.DateField()
+    leg = models.PositiveSmallIntegerField(choices=Leg.choices)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PREPARED)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     students = models.ManyToManyField(Student, blank=True, related_name="trips")
 
     class Meta:
-        ordering = ["-date", "route__route_name"]
-        constraints = [models.UniqueConstraint(fields=["route", "date"], name="one_trip_per_route_day")]
+        ordering = ["-date", "route__route_name", "leg"]
+        constraints = [models.UniqueConstraint(fields=["route", "date", "leg"], name="one_trip_per_route_day_leg")]
         permissions = [
             ("prepare_trip", "Can prepare trips"),
             ("manage_operational_data", "Can manage operational data"),
@@ -98,7 +125,32 @@ class Trip(models.Model):
             raise ValidationError({"monitor": "The monitor must be assigned to this route."})
 
     def __str__(self):
-        return f"{self.route} · {self.date:%d %b %Y}"
+        return f"{self.route} · {self.date:%d %b %Y} · {self.get_leg_display()}"
+
+
+class TripLocation(models.Model):
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="location_samples")
+    latitude = models.FloatField(validators=[validate_latitude])
+    longitude = models.FloatField(validators=[validate_longitude])
+    accuracy_m = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    observed_at = models.DateTimeField()
+    received_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(max_length=20)
+    client_sample_id = models.UUIDField()
+
+    class Meta:
+        ordering = ["-observed_at", "-received_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["trip", "client_sample_id"], name="unique_location_sample_per_trip")
+        ]
+        indexes = [models.Index(fields=["trip", "-observed_at", "-received_at"], name="trip_location_latest_idx")]
+
+    def clean(self):
+        if self.observed_at and not timezone.is_aware(self.observed_at):
+            raise ValidationError({"observed_at": "The observed time must include a timezone."})
+
+    def __str__(self):
+        return f"{self.trip} · {self.observed_at}"
 
 
 class StudentAttendance(models.Model):

@@ -1,0 +1,25 @@
+{% extends "bus_tracker_app/base.html" %}
+
+{% block title %}Journey updates · SchoolRun{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
+    <p class="text-sm font-bold uppercase tracking-widest text-teal-700">Parent journey</p>
+    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Journey updates</h1>
+    <p class="mt-4 max-w-2xl text-lg leading-8 text-slate-600">Live trip tracking is not connected yet. This page will show verified journey events once the trip and update workflows are implemented.</p>
+
+    <div class="mt-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div class="flex items-start gap-4">
+            <span class="grid size-12 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-800">
+                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+            </span>
+            <div>
+                <h2 class="text-xl font-bold text-slate-950">No live updates available</h2>
+                <p class="mt-2 leading-7 text-slate-600">We will not display sample locations, arrival times, or boarding events as though they happened. The next backend iteration will connect this view to actual trip records and monitor updates.</p>
+            </div>
+        </div>
+    </div>
+
+    <a class="mt-8 inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="{% url 'bus_tracker_app:home' %}">← Back to home</a>
+</section>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% load static %}
+<!doctype html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SchoolRun bus trip management and live journey updates">
+    <title>{% block title %}SchoolRun{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}">
+    <script src="{% static 'js/app.js' %}" defer></script>
+</head>
+<body class="min-h-full bg-slate-50 text-slate-950 antialiased">
+    <a class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg" href="#main-content">Skip to content</a>
+    <header class="border-b border-slate-200 bg-white/95 backdrop-blur">
+        <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8" aria-label="Main navigation">
+            <a class="flex items-center gap-3" href="{% url 'bus_tracker_app:home' %}">
+                <span class="grid size-10 place-items-center rounded-xl bg-teal-600 text-white shadow-sm" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17V6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5V17M5 11h14M8 20h.01M16 20h.01M7 17h10a2 2 0 0 1 2 2v1H5v-1a2 2 0 0 1 2-2Z"/></svg>
+                </span>
+                <span>
+                    <span class="block text-base font-bold leading-none tracking-tight">SchoolRun</span>
+                    <span class="mt-1 block text-xs font-medium text-slate-500">Journey updates, made simple</span>
+                </span>
+            </a>
+            <div class="flex items-center gap-2 sm:gap-3">
+                {% block nav_actions %}
+                {% if perms.bus_tracker_app.manage_operational_data %}<a class="hidden rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:inline-flex" href="{% url 'bus_tracker_app:management_home' %}">Manage data</a>{% endif %}
+                <a class="inline-flex items-center rounded-lg bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800" href="{% url 'bus_tracker_app:parent_live' %}">Parent view</a>
+                {% if user.is_authenticated %}
+                <form method="post" action="{% url 'bus_tracker_app:logout' %}">{% csrf_token %}<button type="submit" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Sign out</button></form>
+                {% else %}
+                <a class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100" href="{% url 'bus_tracker_app:login' %}">Sign in</a>
+                {% endif %}
+                {% endblock %}
+            </div>
+        </nav>
+    </header>
+    <main id="main-content">
+        {% if messages %}
+        <div class="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
+            {% for message in messages %}
+            <div class="rounded-xl px-4 py-3 text-sm font-medium {% if message.tags == 'error' %}bg-rose-50 text-rose-800 ring-1 ring-inset ring-rose-200{% else %}bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200{% endif %}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="border-t border-slate-200 bg-white">
+        <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+            <p>SchoolRun · Frontend prototype</p>
+            <p>Live trip updates are not connected yet.</p>
+        </div>
+    </footer>
+</body>
+</html>

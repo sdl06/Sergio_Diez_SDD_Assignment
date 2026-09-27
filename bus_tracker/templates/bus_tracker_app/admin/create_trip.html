@@ -1,0 +1,160 @@
+{% extends "bus_tracker_app/base.html" %}
+
+{% block title %}Create a trip · SchoolRun{% endblock %}
+
+{% block nav_actions %}
+<span class="hidden text-sm font-medium text-slate-500 sm:inline">Trip workspace</span>
+<a class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" href="{% url 'bus_tracker_app:home' %}">Exit</a>
+<form method="post" action="{% url 'bus_tracker_app:logout' %}">{% csrf_token %}<button type="submit" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Sign out</button></form>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12" data-trip-builder>
+    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+            <p class="text-sm font-bold uppercase tracking-widest text-teal-700">Trip planning</p>
+            <h1 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Create a new trip</h1>
+            <p class="mt-3 max-w-2xl text-slate-600">Enter the journey details and assign the children expected on board.</p>
+            {% if perms.bus_tracker_app.manage_operational_data %}<p class="mt-3 text-sm text-slate-600">Missing a route, monitor, or child? <a class="font-semibold text-teal-700 hover:text-teal-900" href="{% url 'bus_tracker_app:management_home' %}">Add records in Manage data</a> first.</p>{% endif %}
+            {% if selected_route %}<a class="mt-4 inline-flex rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700" href="{% url 'bus_tracker_app:prepare_trip_form' selected_route.pk %}">Prepare a saved trip for {{ selected_route }}</a>{% endif %}
+        </div>
+        <div class="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+            <span class="size-2 rounded-full bg-amber-500"></span> Draft not saved
+        </div>
+    </div>
+
+    <ol class="mt-8 grid grid-cols-3 gap-2" aria-label="Trip creation progress">
+        <li class="rounded-xl bg-teal-600 px-3 py-3 text-sm font-semibold text-white"><span class="mr-2 opacity-70">1</span> Details</li>
+        <li class="rounded-xl bg-white px-3 py-3 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200"><span class="mr-2">2</span> Children</li>
+        <li class="rounded-xl bg-white px-3 py-3 text-sm font-semibold text-slate-500 ring-1 ring-inset ring-slate-200"><span class="mr-2">3</span> Review</li>
+    </ol>
+
+    <form class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]" data-trip-form novalidate>
+        <div class="space-y-6">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="journey-details-heading">
+                <div class="flex items-center gap-3">
+                    <span class="grid size-10 place-items-center rounded-xl bg-teal-50 font-bold text-teal-700">01</span>
+                    <div>
+                        <h2 id="journey-details-heading" class="text-lg font-bold">Journey details</h2>
+                        <p class="text-sm text-slate-500">Where and when the bus is travelling.</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 grid gap-5 sm:grid-cols-2">
+                    <label class="block sm:col-span-2">
+                        <span class="text-sm font-semibold text-slate-700">Trip name</span>
+                        <input required name="trip_name" type="text" placeholder="e.g. Monday morning school run" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm shadow-sm outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-100">
+                        <span class="mt-1 hidden text-xs font-medium text-rose-600" data-error-for="trip_name">Add a name for this trip.</span>
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-semibold text-slate-700">Route</span>
+                        <select required name="route" data-route-select class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100">
+                            <option value="">Select a route</option>
+                            {% for route in routes %}
+                            <option value="{{ route.pk }}"{% if selected_route.pk == route.pk %} selected{% endif %}>{{ route.route_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="mt-1 block text-xs text-slate-500">Choose a route to load its children. Changing it refreshes this draft.</span>
+                        <span class="mt-1 hidden text-xs font-medium text-rose-600" data-error-for="route">Choose a route.</span>
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-semibold text-slate-700">Monitor</span>
+                        <select required name="monitor" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100">
+                            <option value="">Assign a monitor</option>
+                            {% for monitor in monitors %}
+                            <option value="{{ monitor.pk }}">{{ monitor.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if selected_route and not monitors %}<span class="mt-1 block text-xs text-slate-500">No monitor is assigned to this route yet.</span>{% endif %}
+                        <span class="mt-1 hidden text-xs font-medium text-rose-600" data-error-for="monitor">Assign a monitor.</span>
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-semibold text-slate-700">Date</span>
+                        <input required name="date" type="date" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100">
+                        <span class="mt-1 hidden text-xs font-medium text-rose-600" data-error-for="date">Choose a trip date.</span>
+                    </label>
+                    <label class="block">
+                        <span class="text-sm font-semibold text-slate-700">Departure time</span>
+                        <input required name="time" type="time" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100">
+                        <span class="mt-1 hidden text-xs font-medium text-rose-600" data-error-for="time">Choose a departure time.</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="assign-children-heading">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 font-bold text-teal-700">02</span>
+                        <div>
+                            <h2 id="assign-children-heading" class="text-lg font-bold">Assign children</h2>
+                            <p class="text-sm text-slate-500"><span data-selected-count>0</span> of {{ children|length }} selected</p>
+                        </div>
+                    </div>
+                    <label class="relative block">
+                        <span class="sr-only">Search children</span>
+                        <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                        <input type="search" placeholder="Search children" class="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100 sm:w-52" data-child-search>
+                    </label>
+                </div>
+
+                <div class="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                    <div class="flex items-center justify-between bg-slate-50 px-4 py-3">
+                        <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-700">
+                            <input type="checkbox" class="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600" data-select-all> Select all visible
+                        </label>
+                        <span class="text-xs font-medium text-slate-500">Sorted by assigned stop</span>
+                    </div>
+                    <div class="divide-y divide-slate-200" data-child-list>
+                        {% for child in children %}
+                        <label class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition hover:bg-teal-50/50" data-child-row data-search-value="{{ child.name|lower }} {{ child.assigned_stop.descriptor|lower }}">
+                            <input type="checkbox" name="children" value="{{ child.pk }}" class="size-4 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-600" data-child-checkbox>
+                            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-600">{{ child.name|slice:":1" }}</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm font-semibold text-slate-900">{{ child.name }}</span>
+                                <span class="block truncate text-xs text-slate-500">{{ child.assigned_stop.descriptor }}</span>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% if not children %}
+                    <p class="px-4 py-8 text-center text-sm text-slate-500">{% if selected_route %}No children are assigned to this route yet.{% else %}Select a route to see its children.{% endif %}</p>
+                    {% endif %}
+                    <p class="hidden px-4 py-8 text-center text-sm text-slate-500" data-empty-search>No children match that search.</p>
+                </div>
+                <p class="mt-2 hidden text-xs font-medium text-rose-600" data-children-error>Select at least one child.</p>
+            </section>
+        </div>
+
+        <aside class="lg:sticky lg:top-6 lg:self-start">
+            <div class="rounded-2xl bg-slate-950 p-5 text-white shadow-xl sm:p-6">
+                <p class="text-xs font-bold uppercase tracking-widest text-teal-300">Trip summary</p>
+                <h2 class="mt-2 text-xl font-bold" data-summary-name>Untitled trip</h2>
+                <dl class="mt-6 space-y-4 text-sm">
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 pb-4"><dt class="text-slate-400">Route</dt><dd class="text-right font-semibold" data-summary-route>Not selected</dd></div>
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 pb-4"><dt class="text-slate-400">Schedule</dt><dd class="text-right font-semibold" data-summary-schedule>Not scheduled</dd></div>
+                    <div class="flex items-start justify-between gap-4"><dt class="text-slate-400">Passengers</dt><dd class="text-right font-semibold"><span data-summary-count>0</span> children</dd></div>
+                </dl>
+                <button type="submit" class="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 px-4 py-3 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-300/40">
+                    Review trip
+                    <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+                <p class="mt-3 text-center text-xs leading-5 text-slate-400">Review all details before the trip is created.</p>
+            </div>
+        </aside>
+    </form>
+
+    <div class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" data-review-modal role="dialog" aria-modal="true" aria-labelledby="review-title">
+        <div class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <span class="grid size-12 place-items-center rounded-2xl bg-teal-100 text-teal-700">
+                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>
+            </span>
+            <h2 id="review-title" class="mt-5 text-2xl font-bold tracking-tight">Trip ready for backend integration</h2>
+            <p class="mt-3 leading-7 text-slate-600">The form is valid and the frontend state is complete. Saving will be connected when the trip API and data model are designed.</p>
+            <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" data-close-modal>Continue editing</button>
+                <a href="{% url 'bus_tracker_app:home' %}" class="rounded-xl bg-slate-950 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-800">Return home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

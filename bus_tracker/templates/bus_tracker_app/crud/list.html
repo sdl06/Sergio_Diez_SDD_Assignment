@@ -1,0 +1,23 @@
+{% extends "bus_tracker_app/base.html" %}
+
+{% block title %}{{ label }} · SchoolRun{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div><a class="text-sm font-semibold text-teal-700 hover:text-teal-900" href="{% url 'bus_tracker_app:management_home' %}">← Manage data</a><h1 class="mt-5 text-3xl font-bold tracking-tight">{{ label }}</h1><p class="mt-2 text-slate-600">{{ records|length }} record{{ records|pluralize }}.</p></div>
+        <a class="inline-flex w-fit items-center rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-700" href="{% url 'bus_tracker_app:record_create' resource %}">Add {{ singular }}</a>
+    </div>
+    <div class="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {% if records %}
+        <ul class="divide-y divide-slate-200">
+            {% for record in records %}
+            <li class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><span class="font-semibold text-slate-900">{{ record }}</span><span class="flex gap-3 text-sm font-semibold"><a class="text-teal-700 hover:text-teal-900" href="{% url 'bus_tracker_app:record_update' resource record.pk %}">Edit</a><a class="text-rose-700 hover:text-rose-900" href="{% url 'bus_tracker_app:record_delete' resource record.pk %}">Delete</a></span></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="px-5 py-12 text-center"><p class="font-semibold text-slate-800">No {{ label|lower }} yet.</p><a class="mt-3 inline-block text-sm font-semibold text-teal-700 hover:text-teal-900" href="{% url 'bus_tracker_app:record_create' resource %}">Create the first one</a></div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
