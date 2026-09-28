@@ -2,9 +2,7 @@ import math
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils import timezone
 
 
 def validate_latitude(value):
@@ -118,6 +116,7 @@ class Trip(models.Model):
         permissions = [
             ("prepare_trip", "Can prepare trips"),
             ("manage_operational_data", "Can manage operational data"),
+            ("post_trip_location", "Can post trip locations"),
         ]
 
     def clean(self):
@@ -126,31 +125,6 @@ class Trip(models.Model):
 
     def __str__(self):
         return f"{self.route} · {self.date:%d %b %Y} · {self.get_leg_display()}"
-
-
-class TripLocation(models.Model):
-    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="location_samples")
-    latitude = models.FloatField(validators=[validate_latitude])
-    longitude = models.FloatField(validators=[validate_longitude])
-    accuracy_m = models.PositiveIntegerField(validators=[MinValueValidator(1)])
-    observed_at = models.DateTimeField()
-    received_at = models.DateTimeField(auto_now_add=True)
-    source = models.CharField(max_length=20)
-    client_sample_id = models.UUIDField()
-
-    class Meta:
-        ordering = ["-observed_at", "-received_at"]
-        constraints = [
-            models.UniqueConstraint(fields=["trip", "client_sample_id"], name="unique_location_sample_per_trip")
-        ]
-        indexes = [models.Index(fields=["trip", "-observed_at", "-received_at"], name="trip_location_latest_idx")]
-
-    def clean(self):
-        if self.observed_at and not timezone.is_aware(self.observed_at):
-            raise ValidationError({"observed_at": "The observed time must include a timezone."})
-
-    def __str__(self):
-        return f"{self.trip} · {self.observed_at}"
 
 
 class StudentAttendance(models.Model):
@@ -167,3 +141,9 @@ class StudentAttendance(models.Model):
 
     def __str__(self):
         return f"{self.student} · {self.trip}"
+
+
+# Import the tracking models after their core dependencies have been defined.
+# This keeps Django's model discovery working while the classes live in the
+# tracking package.
+from .tracking.models import ParentChildAccess, TripLocation  # noqa: E402, F401
