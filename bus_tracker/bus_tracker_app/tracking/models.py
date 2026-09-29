@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
-from ..models import Student, Trip, validate_latitude, validate_longitude
+from ..models import Stop, Student, Trip, validate_latitude, validate_longitude
 
 
 class TripLocation(models.Model):
@@ -54,4 +54,33 @@ class ParentChildAccess(models.Model):
         return f"{self.user} can view {self.student}"
 
 
-__all__ = ["ParentChildAccess", "TripLocation"]
+class TripStopEta(models.Model):
+    """Latest traffic-aware ETA calculated for one stop on one trip."""
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="stop_eta_estimates")
+    stop = models.ForeignKey(Stop, on_delete=models.PROTECT, related_name="trip_eta_estimates")
+    origin_latitude = models.FloatField(validators=[validate_latitude])
+    origin_longitude = models.FloatField(validators=[validate_longitude])
+    origin_accuracy_m = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    estimated_arrival = models.DateTimeField()
+    calculated_at = models.DateTimeField()
+    travel_time_seconds = models.PositiveIntegerField()
+    traffic_delay_seconds = models.PositiveIntegerField(default=0)
+    route_distance_m = models.PositiveIntegerField()
+    provider = models.CharField(max_length=20, default="tomtom")
+
+    class Meta:
+        ordering = ["-calculated_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["trip", "stop"], name="one_eta_per_trip_stop")
+        ]
+
+    def clean(self):
+        if self.trip_id and self.stop_id and self.stop.assigned_route_id != self.trip.route_id:
+            raise ValidationError({"stop": "The stop must belong to the trip's route."})
+
+    def __str__(self):
+        return f"{self.trip} · {self.stop} · ETA {self.estimated_arrival}"
+
+
+__all__ = ["ParentChildAccess", "TripLocation", "TripStopEta"]
