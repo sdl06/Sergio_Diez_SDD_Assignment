@@ -12,4 +12,9 @@ urlpatterns = [
         views.latest_child_trip_location,
         name="latest_child_trip_location",
     ),
+    path(
+        "children/<int:child_id>/trips/<int:trip_id>/eta/",
+        views.latest_child_trip_eta,
+        name="latest_child_trip_eta",
+    ),
 ]

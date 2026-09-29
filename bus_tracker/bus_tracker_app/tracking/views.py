@@ -14,7 +14,8 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_GET, require_POST
 
 from ..models import Student, Trip
-from .models import TripLocation
+from .eta import EtaProviderError, EtaResult, get_or_refresh_eta, scheduled_arrival_for
+from .models import TripLocation, TripStopEta
 
 
 MAX_LOCATION_BODY_BYTES = 4_096
@@ -200,3 +201,104 @@ def latest_child_trip_location(request, child_id, trip_id):
         build_safe_location_state(trip, sample),
         headers={"Cache-Control": "no-store"},
     )
+
+
+def build_parent_eta_state(*, child, trip, sample, eta_result):
+    """Combine safe location data with the stop-specific cached ETA."""
+
+    response = build_safe_location_state(trip, sample)
+    response.update(
+        {
+            "student_id": child.pk,
+            "stop_id": child.assigned_stop_id,
+            "stop_name": child.assigned_stop.descriptor,
+            "eta_state": eta_result.state,
+            "estimate_refreshed": eta_result.refreshed,
+            "estimated_arrival": None,
+            "scheduled_arrival": None,
+            "delay_seconds": None,
+            "eta_calculated_at": None,
+            "travel_time_seconds": None,
+            "traffic_delay_seconds": None,
+        }
+    )
+
+    estimate = eta_result.estimate
+    if estimate is None:
+        return response
+
+    scheduled_arrival = scheduled_arrival_for(trip, child.assigned_stop)
+    response.update(
+        {
+            "estimated_arrival": estimate.estimated_arrival.isoformat(),
+            "scheduled_arrival": scheduled_arrival.isoformat(),
+            "delay_seconds": int((estimate.estimated_arrival - scheduled_arrival).total_seconds()),
+            "eta_calculated_at": estimate.calculated_at.isoformat(),
+            "travel_time_seconds": estimate.travel_time_seconds,
+            "traffic_delay_seconds": estimate.traffic_delay_seconds,
+        }
+    )
+    return response
+
+
+@login_required
+@require_GET
+def latest_child_trip_eta(request, child_id, trip_id):
+    """Return live location plus a cached traffic-aware ETA for a child's stop."""
+
+    child = get_object_or_404(
+        Student.objects.select_related("assigned_stop"),
+        pk=child_id,
+        parent_accesses__user=request.user,
+    )
+    trip = get_object_or_404(Trip, pk=trip_id, students=child)
+    sample = trip.location_samples.order_by("-observed_at", "-received_at").first()
+
+    if trip.status != Trip.Status.ACTIVE:
+        eta_result = EtaResult(estimate=None, state=trip.status, refreshed=False)
+    elif sample is None:
+        eta_result = EtaResult(estimate=None, state="no_location", refreshed=False)
+    else:
+        stale_after = timedelta(seconds=float(getattr(settings, "LOCATION_STALE_AFTER_SECONDS", 45)))
+        if timezone.now() - sample.observed_at > stale_after:
+            eta_result = EtaResult(
+                estimate=TripStopEta.objects.filter(
+                    trip=trip,
+                    stop=child.assigned_stop,
+                ).first(),
+                state="stale_location",
+                refreshed=False,
+            )
+        else:
+            eta_result = get_or_refresh_eta(
+                trip=trip,
+                stop=child.assigned_stop,
+                location=sample,
+            )
+
+    try:
+        payload = build_parent_eta_state(
+            child=child,
+            trip=trip,
+            sample=sample,
+            eta_result=eta_result,
+        )
+    except EtaProviderError:
+        payload = build_safe_location_state(trip, sample)
+        payload.update(
+            {
+                "student_id": child.pk,
+                "stop_id": child.assigned_stop_id,
+                "stop_name": child.assigned_stop.descriptor,
+                "eta_state": "eta_unavailable",
+                "estimate_refreshed": False,
+                "estimated_arrival": None,
+                "scheduled_arrival": None,
+                "delay_seconds": None,
+                "eta_calculated_at": None,
+                "travel_time_seconds": None,
+                "traffic_delay_seconds": None,
+            }
+        )
+
+    return JsonResponse(payload, headers={"Cache-Control": "no-store"})

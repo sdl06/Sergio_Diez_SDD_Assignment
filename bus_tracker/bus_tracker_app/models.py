@@ -146,4 +146,4 @@ class StudentAttendance(models.Model):
 # Import the tracking models after their core dependencies have been defined.
 # This keeps Django's model discovery working while the classes live in the
 # tracking package.
-from .tracking.models import ParentChildAccess, TripLocation  # noqa: E402, F401
+from .tracking.models import ParentChildAccess, TripLocation, TripStopEta  # noqa: E402, F401
