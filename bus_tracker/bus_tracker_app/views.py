@@ -85,6 +85,7 @@ def prepare_trip(request, route_id):
             trip, created = Trip.objects.get_or_create(
                 route=route,
                 date=form.cleaned_data["date"],
+                leg=form.cleaned_data["leg"],
                 defaults={"bus": form.cleaned_data["bus"], "monitor": form.cleaned_data["monitor"]},
             )
             if created:

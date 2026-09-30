@@ -64,7 +64,7 @@ class StudentForm(StyledModelForm):
 class TripForm(StyledModelForm):
     class Meta:
         model = Trip
-        fields = ["route", "bus", "monitor", "date", "students"]
+        fields = ["route", "bus", "monitor", "date", "leg", "students"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "students": forms.CheckboxSelectMultiple(),
@@ -88,7 +88,7 @@ class PrepareTripForm(StyledModelForm):
 
     class Meta:
         model = Trip
-        fields = ["bus", "monitor", "date"]
+        fields = ["bus", "monitor", "date", "leg"]
         widgets = {"date": forms.DateInput(attrs={"type": "date"})}
 
     def __init__(self, *args, route, assigned_monitor=None, **kwargs):

@@ -92,8 +92,8 @@ class Student(models.Model):
 
 class Trip(models.Model):
     class Leg(models.IntegerChoices):
-        TO_SCHOOL = 1, "To school"
-        FROM_SCHOOL = 2, "From school"
+        MORNING = 1, "Morning"
+        AFTERNOON = 2, "Afternoon"
 
     class Status(models.TextChoices):
         PREPARED = "prepared", "Prepared"

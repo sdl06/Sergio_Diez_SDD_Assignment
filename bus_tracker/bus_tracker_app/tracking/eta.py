@@ -177,7 +177,7 @@ def scheduled_arrival_for(trip, stop):
 
     scheduled_time = (
         stop.configured_leg1_arrival
-        if trip.leg == Trip.Leg.TO_SCHOOL
+        if trip.leg == Trip.Leg.MORNING
         else stop.configured_leg2_arrival
     )
     try:
