@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -128,3 +129,16 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Traffic-aware ETA configuration. Keep the TomTom key outside source control.
+TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "")
+TOMTOM_ROUTING_URL = os.environ.get(
+    "TOMTOM_ROUTING_URL",
+    "https://api.tomtom.com/maps/orbis/routing/routes/calculate?apiVersion=3",
+)
+TOMTOM_TIMEOUT_SECONDS = float(os.environ.get("TOMTOM_TIMEOUT_SECONDS", "5"))
+ETA_MIN_REFRESH_SECONDS = float(os.environ.get("ETA_MIN_REFRESH_SECONDS", "30"))
+ETA_MAX_REFRESH_SECONDS = float(os.environ.get("ETA_MAX_REFRESH_SECONDS", "60"))
+ETA_MIN_MOVEMENT_METRES = float(os.environ.get("ETA_MIN_MOVEMENT_METRES", "150"))
+SCHOOL_TIME_ZONE = os.environ.get("SCHOOL_TIME_ZONE", "Europe/Madrid")
