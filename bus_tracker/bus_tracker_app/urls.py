@@ -10,6 +10,7 @@ app_name = "bus_tracker_app"
 urlpatterns = [
     path("", views.home, name="home"),
     path("api/", include("bus_tracker_app.tracking.urls")),
+    path("api/", include("bus_tracker_app.attendance.urls")),
     path(
         "accounts/login/",
         auth_views.LoginView.as_view(
