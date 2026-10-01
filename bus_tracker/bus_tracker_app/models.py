@@ -127,23 +127,8 @@ class Trip(models.Model):
         return f"{self.route} · {self.date:%d %b %Y} · {self.get_leg_display()}"
 
 
-class StudentAttendance(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="attendance_records")
-    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="attendance_records")
-    presence = models.BooleanField(default=True)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(fields=["student", "trip"], name="one_attendance_record_per_student_trip")]
-
-    def clean(self):
-        if self.trip_id and self.student_id and not self.trip.students.filter(pk=self.student_id).exists():
-            raise ValidationError({"student": "The student must be assigned to the selected trip."})
-
-    def __str__(self):
-        return f"{self.student} · {self.trip}"
-
-
-# Import the tracking models after their core dependencies have been defined.
+# Import domain models after their core dependencies have been defined.
 # This keeps Django's model discovery working while the classes live in the
-# tracking package.
+# attendance and tracking packages.
+from .attendance.models import AbsenceNotice, StudentAttendance  # noqa: E402, F401
 from .tracking.models import ParentChildAccess, TripLocation, TripStopEta  # noqa: E402, F401

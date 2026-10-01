@@ -102,7 +102,7 @@ class PrepareTripForm(StyledModelForm):
 class StudentAttendanceForm(StyledModelForm):
     class Meta:
         model = StudentAttendance
-        fields = ["student", "trip", "presence"]
+        fields = ["student", "trip", "status", "recorded_by"]
 
     def clean(self):
         cleaned_data = super().clean()
