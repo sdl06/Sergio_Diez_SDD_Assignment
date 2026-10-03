@@ -23,3 +23,13 @@ Context: When deciding location updates, I was checking out the models, and figu
 Decision: I decided to create a whole new model for the location updates, that having Trip as a foreign key.
 Alternatives considered: I considered things like adding an array as a data structure for the model. However, that led to the breach of the first normal form, given the lack of atomicity there is in array. Another choice was to pretty much do nothing about it, but that led to overwriting information, which would have led to the loss of meaningful data in emergency cases.
 Consequences: This change gives many upsides, such as higher database efficiency and a new, meaningful feature, which is to look for past location updates. It only adds additional schema complexity, but in this case, the pros are well-off compared with the cons.
+
+## [4]. <Testing approach decision>
+Date: 2026-10-03
+Status: Decided
+Context: When deciding testing, I considered three things:
+- Edge cases. To implement them, I focused on edge cases, and cases that didn't follow permissions. Those include, for instance, parents of other children, misplaced monitors or impossible calendar dates.
+- Integration testing with the Tomtom API, ensuring commands and CRUD work in a timely manner, given location updates and ETA proxies
+- E2E testing to ensure proper frontend-backend connection
+Alternatives I considered: Testing is a pretty straight forward process, so none really. The other alternatives I have thought about are being more lenient with test cases, but that would have been counterproductive in the long term. For this webapp app, also, I decided to not simulate cases where thousands of people joined simultaneously, due to a limited API calls plan
+Consequences: This approach towards testing gives upsides, ensuring a more robust functionality on paper, rather than a constant iteration where things could be missed out more easily. It also allows savings, since it won't be tested in a production-looking system, for now
