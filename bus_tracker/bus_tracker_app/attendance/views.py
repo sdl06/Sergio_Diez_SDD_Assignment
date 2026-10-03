@@ -1,16 +1,18 @@
 """Session-authenticated, CSRF-protected JSON attendance endpoints."""
 
 from functools import wraps
+import sqlite3
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import OperationalError, connection
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from ..models import Student, Trip
-from .models import AbsenceNotice
+from .models import AbsenceNotice, StudentAttendance
 from .services import (
     AttendanceStateError, build_attendance_roster,
     get_authorized_trip_for_attendance, record_attendance, set_absence_notice,
@@ -31,10 +33,31 @@ def _api_errors(view):
             return _json({"error": "permission_denied"}, 403)
         except Http404:
             return _json({"error": "not_found"}, 404)
+        except OperationalError as error:
+            cause = error.__cause__
+            code = getattr(cause, "sqlite_errorcode", None)
+            # SQLite extended codes retain the primary code in the low byte.
+            # Do not hide missing tables, connection failures or other DB errors.
+            if (
+                connection.vendor != "sqlite"
+                or not isinstance(cause, sqlite3.OperationalError)
+                or not isinstance(code, int)
+                or (code & 0xFF) not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+            ):
+                raise
+            # Atomic service calls have already unwound/rolled back here.
+            # Do not automatically retry with an out-of-date trip state.
+            response = _json({
+                "error": "database_busy",
+                "detail": "Another request is updating the database. Refresh the trip and try again.",
+            }, 503)
+            response["Retry-After"] = "1"
+            return response
     return wrapped
 
 
 def _notice_state(child, trip, notice):
+    observation = StudentAttendance.objects.filter(student=child, trip=trip).first()
     return {
         "student_id": child.pk,
         "trip_id": trip.pk,
@@ -43,6 +66,8 @@ def _notice_state(child, trip, notice):
         "absent": bool(notice and notice.status == AbsenceNotice.Status.REPORTED),
         "reported_at": notice.reported_at if notice else None,
         "updated_at": notice.updated_at if notice else None,
+        "attendance": observation.status if observation else "unrecorded",
+        "recorded_at": observation.recorded_at if observation else None,
     }
 
 

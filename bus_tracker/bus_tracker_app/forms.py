@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
 from .models import Bus, Monitor, Route, Stop, Student, StudentAttendance, Trip
+from .tracking.models import ParentChildAccess
 
 
 class StyledModelForm(forms.ModelForm):
@@ -111,3 +112,9 @@ class StudentAttendanceForm(StyledModelForm):
         if student and trip and not trip.students.filter(pk=student.pk).exists():
             self.add_error("student", "Assign the student to this trip before recording attendance.")
         return cleaned_data
+
+
+class ParentChildAccessForm(StyledModelForm):
+    class Meta:
+        model = ParentChildAccess
+        fields = ["user", "student"]
