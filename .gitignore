@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+
+# Tailwind standalone binary is a local build tool, not a source artifact.
+/bus_tracker/tailwindcss
+
+# Ignore output from a Tailwind process started at the repository root.
+/static/
+
+/bus_tracker/db.sqlite3
+
+# Local secrets; keep only a blank example in source control.
+.env
+.env.*
+!.env.example
+
+# Generated test evidence (retain test source and configuration).
+/output/testing/
+/output/
