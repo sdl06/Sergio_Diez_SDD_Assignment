@@ -1,25 +1,75 @@
 {% extends "bus_tracker_app/base.html" %}
-
+{% load static %}
 {% block title %}Journey updates · SchoolRun{% endblock %}
-
 {% block content %}
-<section class="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 lg:py-20">
-    <p class="text-sm font-bold uppercase tracking-widest text-teal-700">Parent journey</p>
-    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Journey updates</h1>
-    <p class="mt-4 max-w-2xl text-lg leading-8 text-slate-600">Live trip tracking is not connected yet. This page will show verified journey events once the trip and update workflows are implemented.</p>
-
-    <div class="mt-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div class="flex items-start gap-4">
-            <span class="grid size-12 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-800">
-                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
-            </span>
-            <div>
-                <h2 class="text-xl font-bold text-slate-950">No live updates available</h2>
-                <p class="mt-2 leading-7 text-slate-600">We will not display sample locations, arrival times, or boarding events as though they happened. The next backend iteration will connect this view to actual trip records and monitor updates.</p>
-            </div>
+<section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <h1 class="text-3xl font-bold">Journey updates</h1>
+    {% if children %}
+    <form method="get" class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <label for="child" class="block text-sm font-semibold">Child</label>
+        <select id="child" name="child" class="mt-2 rounded-xl border border-slate-300 px-4 py-3">
+        {% for item in children %}<option value="{{ item.pk }}" {% if item.pk == child.pk %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+        </select>
+        <button class="ml-3 rounded-xl bg-teal-600 px-4 py-3 font-bold text-white">Show journeys</button>
+    </form>
+    {% if stop_map_url %}
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 class="text-xl font-bold">Assigned stop · {{ child.assigned_stop.descriptor }}</h2>
+        <p class="mt-2 text-sm text-slate-600">This marker shows the configured pickup/drop-off stop. The bus position appears separately when the monitor shares GPS.</p>
+        <iframe data-stop-map src="{{ stop_map_url }}" title="Assigned stop on OpenStreetMap" class="mt-4 h-80 w-full rounded-xl border border-slate-200" referrerpolicy="no-referrer"></iframe>
+        <p class="mt-2 text-xs text-slate-500">Map © OpenStreetMap contributors. Stop coordinates are approximate.</p>
+    </div>
+    {% endif %}
+    {% if trips %}
+    <form method="get" class="mt-4 flex flex-wrap items-end gap-3">
+        <input type="hidden" name="child" value="{{ child.pk }}">
+        <label class="block text-sm font-semibold" for="trip">Journey
+            <select id="trip" name="trip" class="mt-2 block rounded-xl border border-slate-300 px-4 py-3">
+            {% for item in trips %}<option value="{{ item.pk }}" {% if item.pk == trip.pk %}selected{% endif %}>{{ item.date }} · {{ item.get_leg_display }} · {{ item.get_status_display }}</option>{% endfor %}
+            </select>
+        </label>
+        <button class="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Open journey</button>
+    </form>
+    <div data-parent-journey data-can-report-absence="{{ can_report_absence|yesno:'true,false' }}" data-eta-url="{% url 'bus_tracker_app:tracking:latest_child_trip_eta' child.pk trip.pk %}" data-absence-url="{% url 'bus_tracker_app:attendance:child_trip_absence' child.pk trip.pk %}" class="mt-6 grid gap-6 lg:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 class="text-xl font-bold">{{ child.name }} · {{ trip.get_leg_display }}</h2>
+            <p class="mt-2 text-slate-600">{{ trip.route }} · {{ trip.date }}</p>
+            <p class="mt-2 text-sm">Stop: {{ child.assigned_stop.descriptor }} · Bus: {{ trip.bus.license_plate }} · Monitor: {{ trip.monitor.name }}</p>
+            <p data-journey-status role="status" aria-live="polite" class="mt-4 font-semibold">Loading live update…</p>
+            <dl class="mt-4 space-y-3 text-sm">
+                <div><dt class="text-slate-500">Estimated arrival</dt><dd data-estimated>Not available</dd></div>
+                <div><dt class="text-slate-500">Scheduled arrival</dt><dd data-scheduled>Not available</dd></div>
+                <div><dt class="text-slate-500">Compared with schedule</dt><dd data-delay>Not available</dd></div>
+                <div><dt class="text-slate-500">Traffic delay</dt><dd data-traffic>Not available</dd></div>
+                <div><dt class="text-slate-500">Position observed</dt><dd data-observed>Not available</dd></div>
+                <div><dt class="text-slate-500">Estimate calculated</dt><dd data-calculated>Not available</dd></div>
+            </dl>
+            <button type="button" data-refresh class="mt-5 rounded-xl bg-teal-600 px-4 py-3 font-bold text-white">Refresh update</button>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 class="text-xl font-bold">Bus location</h2>
+            <p data-map-status class="mt-2 text-sm text-slate-600">Waiting for a verified position.</p>
+            <iframe data-bus-map hidden title="Latest bus position on OpenStreetMap" class="mt-4 h-80 w-full rounded-xl border border-slate-200" loading="lazy" referrerpolicy="no-referrer"></iframe>
+            <p class="mt-2 text-xs text-slate-500">Map © OpenStreetMap contributors. GPS and arrival times are approximate.</p>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 class="text-xl font-bold">Absence notice</h2>
+            <p data-child-observation class="mt-3 text-sm">Monitor observation: loading…</p>
+            <p data-notice-status role="status" aria-live="polite" class="mt-3 text-sm">Loading notice…</p>
+            <form data-absence-form class="mt-4">
+                {% csrf_token %}
+                <fieldset data-absence-controls {% if trip.status != 'prepared' or not can_report_absence %}disabled{% endif %}>
+                    <label class="flex items-center gap-3 text-sm"><input type="checkbox" name="absent" data-absent> Report {{ child.name }} absent for this journey</label>
+                    <button class="mt-4 rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Save notice</button>
+                </fieldset>
+            </form>
+            <p class="mt-3 text-sm text-slate-600">Notices can be changed before the trip starts. The monitor records observed attendance separately.</p>
+            {% if not can_report_absence %}<p class="mt-2 text-sm text-slate-600">Administrator viewing: only a linked parent can submit an absence notice.</p>{% endif %}
+            <p class="mt-2 text-xs text-slate-500">Traffic estimates use a general road route; bus restrictions and intermediate stops are not modelled.</p>
         </div>
     </div>
-
-    <a class="mt-8 inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="{% url 'bus_tracker_app:home' %}">← Back to home</a>
+    <script src="{% static 'js/parent_journey.js' %}" defer></script>
+    {% else %}<p class="mt-6 text-slate-600">No trips include {{ child.name }} yet.</p>{% endif %}
+    {% else %}<p class="mt-6 text-slate-600">No children are linked to this account. Ask the administrator to add a parent-child link.</p>{% endif %}
 </section>
 {% endblock %}

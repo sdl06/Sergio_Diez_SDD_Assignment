@@ -12,6 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from ..models import Student, Trip
+from ..tracking.access import visible_children
 from .models import AbsenceNotice, StudentAttendance
 from .services import (
     AttendanceStateError, build_attendance_roster,
@@ -76,7 +77,8 @@ def _notice_state(child, trip, notice):
 @require_http_methods(["GET", "POST"])
 @_api_errors
 def child_trip_absence(request, child_id, trip_id):
-    child = get_object_or_404(Student, pk=child_id, parent_accesses__user=request.user)
+    children = visible_children(request.user) if request.method == "GET" else Student.objects.filter(parent_accesses__user=request.user)
+    child = get_object_or_404(children, pk=child_id)
     trip = get_object_or_404(Trip, pk=trip_id, students=child)
     if request.method == "GET":
         notice = AbsenceNotice.objects.filter(student=child, trip=trip).first()

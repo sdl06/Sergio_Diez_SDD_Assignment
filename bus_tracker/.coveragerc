@@ -1,0 +1,17 @@
+[run]
+branch = True
+source = bus_tracker_app
+data_file = ../output/testing/.coverage
+omit =
+    */tests/*
+    */migrations/*
+    */admin.py
+    */apps.py
+    */urls.py
+
+[report]
+show_missing = True
+fail_under = 85
+
+[html]
+directory = ../output/testing/htmlcov

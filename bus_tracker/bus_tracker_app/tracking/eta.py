@@ -72,8 +72,10 @@ class TomTomRoutingProvider:
                         "coordinates": [destination[1], destination[0]],
                     },
                 },
-                "travelMode": "bus",
-                "routeType": "fastest",
+                # Orbis v3 currently supports car/taxi, not bus. This is a
+                # traffic-aware road estimate, without bus-specific restrictions.
+                "travelMode": "car",
+                "routeType": "fast",
                 "traffic": "live",
                 "departureDateTime": "now",
             }
@@ -94,19 +96,21 @@ class TomTomRoutingProvider:
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 payload = json.load(response)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise EtaProviderError("TomTom routing request failed.") from error
 
         try:
             summary = payload["routes"][0]["summary"]
-            travel_time_seconds = int(summary["travelDurationInSeconds"])
-            traffic_delay_seconds = int(summary.get("trafficDelayDurationInSeconds", 0))
-            route_distance_m = int(summary["lengthInMeters"])
-        except (KeyError, IndexError, TypeError, ValueError) as error:
+            travel_time_seconds = summary["travelDurationInSeconds"]
+            traffic_delay_seconds = summary.get("trafficDelayDurationInSeconds", 0)
+            route_distance_m = summary["lengthInMeters"]
+        except (KeyError, IndexError, TypeError, AttributeError) as error:
             raise EtaProviderError("TomTom returned an unexpected routing response.") from error
 
-        if travel_time_seconds < 0 or traffic_delay_seconds < 0 or route_distance_m < 0:
-            raise EtaProviderError("TomTom returned invalid negative route values.")
+        if any(type(value) is not int or value < 0 for value in (
+            travel_time_seconds, traffic_delay_seconds, route_distance_m,
+        )):
+            raise EtaProviderError("TomTom returned invalid route values.")
 
         return ProviderRoute(
             travel_time_seconds=travel_time_seconds,

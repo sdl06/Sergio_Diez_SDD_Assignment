@@ -7,6 +7,7 @@
     <meta name="description" content="SchoolRun bus trip management and live journey updates">
     <title>{% block title %}SchoolRun{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/output.css' %}">
+    <script src="{% static 'js/api.js' %}" defer></script>
     <script src="{% static 'js/app.js' %}" defer></script>
 </head>
 <body class="min-h-full bg-slate-50 text-slate-950 antialiased">
@@ -25,7 +26,8 @@
             <div class="flex items-center gap-2 sm:gap-3">
                 {% block nav_actions %}
                 {% if perms.bus_tracker_app.manage_operational_data %}<a class="hidden rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:inline-flex" href="{% url 'bus_tracker_app:management_home' %}">Manage data</a>{% endif %}
-                <a class="inline-flex items-center rounded-lg bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800" href="{% url 'bus_tracker_app:parent_live' %}">Parent view</a>
+                {% if perms.bus_tracker_app.prepare_trip or perms.bus_tracker_app.post_trip_location or perms.bus_tracker_app.record_trip_attendance or perms.bus_tracker_app.manage_operational_data %}<a class="rounded-lg px-3 py-2 text-sm font-semibold text-teal-700" href="{% url 'bus_tracker_app:trip_list' %}">Saved trips</a>{% endif %}
+                <a class="inline-flex items-center rounded-lg bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800" href="{% url 'bus_tracker_app:parent_live' %}">{% if perms.bus_tracker_app.manage_operational_data %}All journeys{% else %}Parent view{% endif %}</a>
                 {% if user.is_authenticated %}
                 <form method="post" action="{% url 'bus_tracker_app:logout' %}">{% csrf_token %}<button type="submit" class="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Sign out</button></form>
                 {% else %}
@@ -47,8 +49,8 @@
     </main>
     <footer class="border-t border-slate-200 bg-white">
         <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-            <p>SchoolRun · Frontend prototype</p>
-            <p>Live trip updates are not connected yet.</p>
+            <p>SchoolRun · Journey updates</p>
+            <p>GPS positions and arrival estimates are approximate.</p>
         </div>
     </footer>
 </body>

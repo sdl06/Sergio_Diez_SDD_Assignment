@@ -12,6 +12,7 @@
         <h2 class="text-lg font-bold text-slate-950">Set up initial data here</h2>
         <p class="mt-2 text-sm leading-6 text-slate-700">Start with a route, then add its stops, a bus, a monitor assigned to that route, and students assigned to its stops. The trip builder reads those records from SQLite.</p>
         <p class="mt-2 text-sm leading-6 text-slate-700">For monitor trip preparation, first <a class="font-semibold text-teal-800 underline" href="{% url 'admin:auth_user_changelist' %}">create a Django user</a>, grant the Trip “Can prepare trips” permission, then link that user in the monitor form.</p>
+        <p class="mt-2 text-sm leading-6 text-slate-700">For parent access, create a Django user and <a class="font-semibold text-teal-800 underline" href="{% url 'bus_tracker_app:record_create' 'parent-access' %}">link it to a child</a>. Use the child’s name for the account if desired. Monitor location sharing and attendance also need their respective permissions.</p>
         <div class="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
             <a class="rounded-lg bg-white px-3 py-2 text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100" href="{% url 'bus_tracker_app:record_create' 'routes' %}">1. Add route</a>
             <a class="rounded-lg bg-white px-3 py-2 text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100" href="{% url 'bus_tracker_app:record_create' 'stops' %}">2. Add stops</a>

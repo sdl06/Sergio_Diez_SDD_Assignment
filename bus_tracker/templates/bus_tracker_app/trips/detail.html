@@ -1,0 +1,58 @@
+{% extends "bus_tracker_app/base.html" %}
+{% load static %}
+{% block title %}{{ trip }} · SchoolRun{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <a href="{% url 'bus_tracker_app:trip_list' %}" class="text-sm font-semibold text-teal-700">Saved trips</a>
+    <h1 class="mt-6 text-3xl font-bold">{{ trip.route }} · {{ trip.get_leg_display }}</h1>
+    <p class="mt-3 text-slate-600">{{ trip.date }} · {{ trip.monitor.name }} · {{ trip.bus.license_plate }}</p>
+    <p class="mt-3 font-semibold">Status: {{ trip.get_status_display }}</p>
+    {% if error %}<p role="alert" class="mt-4 rounded-xl bg-rose-50 p-4 text-rose-800">{{ error }}</p>{% endif %}
+    <div class="mt-6 flex gap-3">
+    {% if can_transition and trip.status == 'prepared' %}
+        <form method="post" action="{% url 'bus_tracker_app:start_trip' trip.pk %}">{% csrf_token %}<button class="rounded-xl bg-teal-600 px-5 py-3 font-bold text-white">Start trip</button></form>
+    {% elif can_transition and trip.status == 'active' %}
+        <form method="post" action="{% url 'bus_tracker_app:complete_trip' trip.pk %}" data-complete-trip>{% csrf_token %}<button class="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white">Complete trip</button></form>
+    {% endif %}
+    </div>
+    <dl class="mt-6 text-sm text-slate-600"><dt>Started</dt><dd>{{ trip.started_at|default:'Not started' }}</dd><dt class="mt-2">Completed</dt><dd>{{ trip.completed_at|default:'Not completed' }}</dd></dl>
+    {% if can_share %}
+    <div {% if trip.status == 'active' %}data-location-sender{% endif %} data-post-url="{% url 'bus_tracker_app:tracking:post_trip_location' trip.pk %}" data-state-url="{% url 'bus_tracker_app:trip_state' trip.pk %}" class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <form data-location-token>{% csrf_token %}</form>
+        <h2 class="text-xl font-bold">Share bus location</h2>
+        <p class="mt-2 text-sm text-slate-600">Allow location access and keep this page open and visible while sharing. Use HTTPS outside localhost.</p>
+        <button type="button" data-share-start {% if trip.status != 'active' %}disabled{% endif %} class="mt-4 rounded-xl bg-teal-600 px-4 py-3 font-bold text-white">Share location</button>
+        <button type="button" data-share-stop hidden class="mt-4 rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Stop sharing</button>
+        <p data-share-status role="status" aria-live="polite" class="mt-4 text-sm">{% if trip.status == 'prepared' %}Start this trip to enable location sharing.{% elif trip.status == 'completed' %}This trip is completed; location sharing is closed.{% else %}Location sharing is off.{% endif %}</p>
+        <p data-share-last class="mt-2 text-sm text-slate-600">No position accepted during this session.</p>
+    </div>
+    {% if trip.status == 'active' %}<script src="{% static 'js/location_sender.js' %}" defer></script>{% endif %}
+    {% else %}<p class="mt-6 text-slate-600">Only the assigned monitor with location-posting permission can share GPS.</p>{% endif %}
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 class="text-xl font-bold">Passengers ({{ children|length }})</h2>
+        <ul class="mt-4 divide-y divide-slate-200">{% for child in children %}<li class="py-3"><span class="font-semibold">{{ child.name }}</span> · {{ child.assigned_stop.descriptor }}</li>{% empty %}<li class="py-3 text-slate-600">No passengers assigned.</li>{% endfor %}</ul>
+    </div>
+    {% if can_attend %}
+    <div data-attendance-panel data-roster-url="{% url 'bus_tracker_app:attendance:trip_attendance_roster' trip.pk %}" class="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <form data-attendance-token>{% csrf_token %}</form>
+        <h2 class="text-xl font-bold">Attendance</h2>
+        <p data-attendance-status role="status" aria-live="polite" class="mt-3 text-sm">Loading roster…</p>
+        <button type="button" data-attendance-refresh class="mt-4 rounded-xl bg-teal-600 px-4 py-3 font-bold text-white">Refresh roster</button>
+        {% for child in children %}
+        <div data-attendance-row data-student-id="{{ child.pk }}" data-record-url="{% url 'bus_tracker_app:attendance:trip_attendance_record' trip.pk child.pk %}" class="mt-4 border-t border-slate-200 pt-4">
+            <h3 class="font-semibold">{{ child.name }}</h3>
+            <p data-child-facts class="mt-2 text-sm text-slate-600">Loading notice and observation…</p>
+            <form data-record-form class="mt-3 flex flex-wrap items-center gap-3">
+                <label class="text-sm">Observation <select name="status" class="ml-2 rounded-xl border border-slate-300 px-3 py-2" required {% if trip.status != 'active' %}disabled{% endif %}>
+                    <option value="">Unrecorded</option><option value="present">Present</option><option value="absent">Absent</option>
+                </select></label>
+                <button class="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white" {% if trip.status != 'active' %}disabled{% endif %}>Save observation</button>
+            </form>
+        </div>
+        {% endfor %}
+        <p class="mt-4 text-sm text-slate-600">Observations can be changed only while this trip is active. An unrecorded child is not assumed present.</p>
+    </div>
+    <script src="{% static 'js/attendance.js' %}" defer></script>
+    {% endif %}
+</section>
+{% endblock %}

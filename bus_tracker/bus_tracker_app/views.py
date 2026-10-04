@@ -1,3 +1,6 @@
+import math
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
@@ -11,6 +14,7 @@ from .forms import (
     BusForm,
     MonitorForm,
     PrepareTripForm,
+    ParentChildAccessForm,
     RouteForm,
     StopForm,
     StudentAttendanceForm,
@@ -18,6 +22,9 @@ from .forms import (
     TripForm,
 )
 from .models import Bus, Monitor, Route, Stop, Student, StudentAttendance, Trip
+from .tracking.models import ParentChildAccess
+from .tracking.access import visible_children
+from django.views.decorators.cache import never_cache
 
 
 def home(request):
@@ -41,6 +48,10 @@ def create_trip(request):
         selected_route.students.select_related("assigned_stop").order_by("assigned_stop__descriptor", "name")
         if selected_route else Student.objects.none()
     )
+    form = None
+    if selected_route:
+        route, monitor = authorized_trip_route(request.user, selected_route.pk)
+        form = PrepareTripForm(route=route, assigned_monitor=monitor)
     return render(
         request,
         "bus_tracker_app/admin/create_trip.html",
@@ -51,6 +62,7 @@ def create_trip(request):
                 selected_route.monitors.all() if is_admin else selected_route.monitors.filter(user=request.user)
             ) if selected_route else Monitor.objects.none(),
             "children": children,
+            "form": form,
         },
     )
 
@@ -94,15 +106,50 @@ def prepare_trip(request, route_id):
             messages.success(request, f"{trip} was prepared with the route's students.")
         else:
             messages.info(request, f"{trip} already exists; no details were changed.")
-        return redirect("bus_tracker_app:prepare_trip_form", route_id=route.pk)
+        if not request.user.has_perm("bus_tracker_app.manage_operational_data") and trip.monitor.user_id != request.user.pk:
+            messages.info(request, "The existing trip belongs to another monitor.")
+            return redirect("bus_tracker_app:trip_list")
+        return redirect("bus_tracker_app:trip_detail", trip_id=trip.pk)
     return render(request, "bus_tracker_app/admin/prepare_trip.html", {"route": route, "form": form})
 
 
+@never_cache
+@login_required
+@require_GET
 def parent_live(request):
-    return render(request, "bus_tracker_app/parents/live.html")
+    children = visible_children(request.user).order_by("name", "pk")
+    child_id = request.GET.get("child")
+    trip_id = request.GET.get("trip")
+    for value in (child_id, trip_id):
+        if value and not value.isdecimal():
+            raise Http404("Unknown journey.")
+    child = get_object_or_404(children, pk=child_id) if child_id else children.first()
+    trips = Trip.objects.filter(students=child).select_related("route", "bus", "monitor") if child else Trip.objects.none()
+    trip = get_object_or_404(trips, pk=trip_id) if trip_id else (
+        trips.filter(status=Trip.Status.ACTIVE).first() or trips.first()
+    )
+    stop_map_url = None
+    if child:
+        lat, lon = child.assigned_stop.latitude, child.assigned_stop.longitude
+        if math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
+            stop_map_url = "https://www.openstreetmap.org/export/embed.html?" + urlencode({
+                "bbox": ",".join(str(value) for value in (
+                    max(-180, lon - .01), max(-90, lat - .01),
+                    min(180, lon + .01), min(90, lat + .01))),
+                "layer": "mapnik", "marker": f"{lat},{lon}",
+            })
+    return render(request, "bus_tracker_app/parents/live.html", {
+        "children": children, "child": child, "trips": trips, "trip": trip,
+        "stop_map_url": stop_map_url,
+        "can_report_absence": bool(child and ParentChildAccess.objects.filter(user=request.user, student=child).exists()),
+    })
 
 
 CRUD_RESOURCES = {
+    "parent-access": {
+        "model": ParentChildAccess, "form": ParentChildAccessForm,
+        "label": "Parent-child access", "singular": "parent-child link",
+    },
     "routes": {"model": Route, "form": RouteForm, "label": "Routes", "singular": "route"},
     "stops": {"model": Stop, "form": StopForm, "label": "Stops", "singular": "stop"},
     "buses": {"model": Bus, "form": BusForm, "label": "Buses", "singular": "bus"},

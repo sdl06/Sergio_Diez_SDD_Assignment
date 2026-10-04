@@ -1,5 +1,6 @@
 import json
 import math
+import re
 from datetime import timedelta
 from uuid import UUID
 
@@ -7,15 +8,17 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_GET, require_POST
 
-from ..models import Student, Trip
+from ..models import Trip
 from .eta import EtaProviderError, EtaResult, get_or_refresh_eta, scheduled_arrival_for
 from .models import TripLocation, TripStopEta
+from .access import visible_children
 
 
 MAX_LOCATION_BODY_BYTES = 4_096
@@ -31,6 +34,10 @@ class LocationRateLimitError(Exception):
     """Raised when a trip is receiving new samples too quickly."""
 
 
+class LocationTripStateError(Exception):
+    """The trip stopped accepting fixes before persistence."""
+
+
 def _finite_number(payload, field, minimum, maximum):
     value = payload.get(field)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -39,6 +46,21 @@ def _finite_number(payload, field, minimum, maximum):
     if not math.isfinite(value) or not minimum <= value <= maximum:
         raise LocationPayloadError(f"{field} must be between {minimum} and {maximum}.")
     return value
+
+
+def _validate_calendar_date(timestamp):
+    """Check an ISO date prefix; Django still validates the complete timestamp."""
+    match = re.match(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})(?=[T ])", timestamp)
+    if match is None:
+        return  # Let parse_datetime handle malformed or alternative date formats.
+    year, month, day = map(int, match.groups())
+    if year == 0 or not 1 <= month <= 12:
+        raise LocationPayloadError("observed_at contains an invalid calendar date.")
+    # Gregorian rule: century years are leap years only when divisible by 400.
+    leap_year = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+    days_per_month = (31, 29 if leap_year else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    if not 1 <= day <= days_per_month[month - 1]:
+        raise LocationPayloadError("observed_at contains an invalid calendar date.")
 
 
 def validate_location_json(raw_body):
@@ -75,7 +97,12 @@ def validate_location_json(raw_body):
 
     if not isinstance(payload["observed_at"], str):
         raise LocationPayloadError("observed_at must be an ISO-8601 timestamp.")
-    observed_at = parse_datetime(payload["observed_at"])
+    _validate_calendar_date(payload["observed_at"])
+    try:
+        observed_at = parse_datetime(payload["observed_at"])
+    except ValueError as error:
+        # Includes invalid time components and date formats not checked above.
+        raise LocationPayloadError("observed_at must be a valid ISO-8601 timestamp.") from error
     if observed_at is None or not timezone.is_aware(observed_at):
         raise LocationPayloadError("observed_at must be a timezone-aware ISO-8601 timestamp.")
     if observed_at > timezone.now() + FUTURE_FIX_TOLERANCE:
@@ -95,8 +122,20 @@ def validate_location_json(raw_body):
     }
 
 
-def save_sample_once(trip, payload):
+@transaction.atomic
+def save_sample_once(trip, payload, *, user):
     """Persist a fix once and identify harmless retries by client sample ID."""
+
+    # Serialize with lifecycle transitions and recheck current assignment/state.
+    # SQLite also acquires a write lock for this conditional no-op update.
+    matched = Trip.objects.filter(
+        pk=trip.pk, status=Trip.Status.ACTIVE, monitor__user=user,
+    ).update(status=F("status"))
+    if not matched:
+        current = get_object_or_404(Trip.objects.select_related("monitor"), pk=trip.pk)
+        if current.monitor.user_id != user.pk:
+            raise PermissionDenied("You are not the monitor assigned to this trip.")
+        raise LocationTripStateError
 
     existing = TripLocation.objects.filter(
         trip=trip,
@@ -170,7 +209,7 @@ def post_trip_location(request, trip_id):
 
     try:
         payload = validate_location_json(request.body)
-        sample, created = save_sample_once(trip, payload)
+        sample, created = save_sample_once(trip, payload, user=request.user)
     except LocationPayloadError as error:
         return JsonResponse({"error": "invalid_location", "detail": str(error)}, status=400)
     except LocationRateLimitError:
@@ -179,6 +218,8 @@ def post_trip_location(request, trip_id):
             status=429,
             headers={"Retry-After": "2"},
         )
+    except LocationTripStateError:
+        return JsonResponse({"error": "trip_not_active"}, status=409)
 
     return JsonResponse(
         {"accepted": True, "sample_id": sample.pk, "duplicate": not created},
@@ -190,9 +231,8 @@ def post_trip_location(request, trip_id):
 @require_GET
 def latest_child_trip_location(request, child_id, trip_id):
     child = get_object_or_404(
-        Student,
+        visible_children(request.user),
         pk=child_id,
-        parent_accesses__user=request.user,
     )
     trip = get_object_or_404(Trip, pk=trip_id, students=child)
     sample = trip.location_samples.order_by("-observed_at", "-received_at").first()
@@ -224,10 +264,11 @@ def build_parent_eta_state(*, child, trip, sample, eta_result):
     )
 
     estimate = eta_result.estimate
+    scheduled_arrival = scheduled_arrival_for(trip, child.assigned_stop)
+    response["scheduled_arrival"] = scheduled_arrival.isoformat()
     if estimate is None:
         return response
 
-    scheduled_arrival = scheduled_arrival_for(trip, child.assigned_stop)
     response.update(
         {
             "estimated_arrival": estimate.estimated_arrival.isoformat(),
@@ -247,9 +288,8 @@ def latest_child_trip_eta(request, child_id, trip_id):
     """Return live location plus a cached traffic-aware ETA for a child's stop."""
 
     child = get_object_or_404(
-        Student.objects.select_related("assigned_stop"),
+        visible_children(request.user),
         pk=child_id,
-        parent_accesses__user=request.user,
     )
     trip = get_object_or_404(Trip, pk=trip_id, students=child)
     sample = trip.location_samples.order_by("-observed_at", "-received_at").first()

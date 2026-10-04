@@ -12,21 +12,28 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=False)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-o1@_=w%+&6he)e4b#9k_%(q7jot+l=3d%i@*h&_1n6e+!p=@s-'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-o1@_=w%+&6he)e4b#9k_%(q7jot+l=3d%i@*h&_1n6e+!p=@s-')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() in {'true', '1', 'yes'}
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
+    'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1],0.0.0.0'
+).split(',') if host.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get(
+    'DJANGO_CSRF_TRUSTED_ORIGINS', ''
+).split(',') if origin.strip()]
 
 
 # Application definition
@@ -53,6 +60,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'bus_tracker.urls'
 LOGIN_URL = 'bus_tracker_app:login'
+LOGIN_REDIRECT_URL = 'bus_tracker_app:home'
 
 TEMPLATES = [
     {
@@ -75,10 +83,11 @@ WSGI_APPLICATION = 'bus_tracker.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
+DATA_DIR = Path(os.environ.get('DATA_DIR', str(BASE_DIR))).expanduser().resolve()
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': DATA_DIR / 'db.sqlite3',
     }
 }
 
