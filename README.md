@@ -49,6 +49,10 @@ Alternatively, copy \`bus\_tracker/.env.example\` to \`bus\_tracker/.env\` and e
 \`DJANGO\_SECRET\_KEY\`, \`DJANGO\_DEBUG\`, comma-separated \`DJANGO\_ALLOWED\_HOSTS\` and \`DJANGO\_CSRF\_TRUSTED\_ORIGINS\`, and \`SCHOOL\_TIME\_ZONE\` are configurable. Local defaults support assessment; on a remote host, use a private secret, disable debug, and allow its hostname. Exported variables override \`.env\`.  
 Create users through /django-admin/. Monitors need the prepare\_trip, post\_trip\_location and record\_trip\_attendance permissions, plus a Monitor profile linking their account to a route. Parents need a ParentChildAccess record linking their account to each child. Neither account requires staff or superuser status.
 
+To test and verify coverage:
+python -m coverage run --rcfile=.coveragerc manage.py test bus_tracker_app.tests --testrunner bus_tracker_app.tests.runner.FileSQLiteRunner
+python -m coverage report --rcfile=.coveragerc
+
 3. # Models
 
 Django was chosen for its established patterns and the developer’s familiarity. The app separates models, views, and templates; migrations store these models in SQLite:
