@@ -42,3 +42,13 @@ Context: One key part of the original idea was for teachers to know which studen
 Decision: I ended up getting rid of it, since despite it would have been pivottal from teachers, it diverged excessively from the core implementation of the project. There were other dropped features like AI-powered route generation given student residence clusters.
 Alternatives I considered: I was thinking about getting rid of parent tracking altogether, but decided not to since parents are the main stakeholder regarding the product and doing so would have led to an inconsistent value proposition
 Consequences: Teachers are currently unable to know whether a student will be late. However, if future versions get released, it would be a priority feature.
+
+## [6]. <The split>
+Date: 2026-11-11
+Status: Decided
+Context: I have to split the domains and core data and functions into 2 different services. The catch is that there will be a service that has to deal with core data. In order to ensure data ownership, 3 different services would have been ideal, but given the project specification, it's banned.
+Decision: I decided to split the data in 2 microservices:
+- **Trip Operations**, which would include routes, stops, buses, monitors, students, trips and trip assignments; location samples, ETAs and parent access.
+- **Attendance**: would include absence notices and definitve attendance records, storing trip and student IDs as reference srather than cross-database foreign keys.
+Alternatives I considered: An alternative would have been to add the core information (students, routes, stops...) in attendance. However, that would have gotten rid of data locality, due to constant http data movement due to tracking updating bus location. The proximity to the domain is also key, since most of the core models are trip operations models.
+Consequences: when filling up attendance, due to the loose coupling of the attendance service to the trip operations service, the process may have more latency, due to HTTP communications being required to fill out the attendance form.
