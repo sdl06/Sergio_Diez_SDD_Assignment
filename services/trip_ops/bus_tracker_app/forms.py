@@ -1,39 +1,16 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
 
 from .models import Bus, Monitor, Route, Stop, Student, Trip
 from .tracking.models import ParentChildAccess
 
 
-class StyledModelForm(forms.ModelForm):
-    """Keeps form presentation out of views while retaining Tailwind styling."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.setdefault(
-                "class",
-                "mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100",
-            )
-
-
-class StyledAuthenticationForm(AuthenticationForm):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs["class"] = (
-                "mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 "
-                "text-sm shadow-sm outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100"
-            )
-
-
-class RouteForm(StyledModelForm):
+class RouteForm(forms.ModelForm):
     class Meta:
         model = Route
         fields = ["route_name"]
 
 
-class StopForm(StyledModelForm):
+class StopForm(forms.ModelForm):
     class Meta:
         model = Stop
         fields = ["descriptor", "assigned_route", "longitude", "latitude", "configured_leg1_arrival", "configured_leg2_arrival"]
@@ -43,26 +20,26 @@ class StopForm(StyledModelForm):
         }
 
 
-class BusForm(StyledModelForm):
+class BusForm(forms.ModelForm):
     class Meta:
         model = Bus
         fields = ["license_plate", "capacity", "bus_model", "bus_contractor", "current_longitude"]
 
 
-class MonitorForm(StyledModelForm):
+class MonitorForm(forms.ModelForm):
     class Meta:
         model = Monitor
         fields = ["name", "route", "user"]
 
 
-class StudentForm(StyledModelForm):
+class StudentForm(forms.ModelForm):
     class Meta:
         model = Student
         fields = ["name", "date_of_birth", "route", "assigned_stop"]
         widgets = {"date_of_birth": forms.DateInput(attrs={"type": "date"})}
 
 
-class TripForm(StyledModelForm):
+class TripForm(forms.ModelForm):
     class Meta:
         model = Trip
         fields = ["route", "bus", "monitor", "date", "leg", "students"]
@@ -84,7 +61,7 @@ class TripForm(StyledModelForm):
         return cleaned_data
 
 
-class PrepareTripForm(StyledModelForm):
+class PrepareTripForm(forms.ModelForm):
     """Collect only choices needed to prepare a dated trip for a known route."""
 
     class Meta:
@@ -100,7 +77,7 @@ class PrepareTripForm(StyledModelForm):
             self.fields["monitor"].disabled = True
 
 
-class ParentChildAccessForm(StyledModelForm):
+class ParentChildAccessForm(forms.ModelForm):
     class Meta:
         model = ParentChildAccess
         fields = ["user", "student"]

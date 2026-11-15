@@ -1,15 +1,14 @@
-import math
-from urllib.parse import urlencode
-
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import ProtectedError
-from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect, render
+from django.forms.models import model_to_dict
+from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
+from .auth import login_required
 from .forms import (
     BusForm,
     MonitorForm,
@@ -23,13 +22,10 @@ from .forms import (
 from .models import Bus, Monitor, Route, Stop, Student, Trip
 from .tracking.access import visible_children
 from .tracking.models import ParentChildAccess
-from django.views.decorators.cache import never_cache
+from .trips.views import trip_data
 
 
-def home(request):
-    return render(request, "bus_tracker_app/home.html")
-
-
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.prepare_trip", raise_exception=True)
 @require_GET
@@ -43,27 +39,10 @@ def create_trip(request):
     selected_route = get_object_or_404(Route, pk=route_id) if route_id else None
     if selected_route and not is_admin and not routes.filter(pk=selected_route.pk).exists():
         raise PermissionDenied("This route is not assigned to you.")
-    children = (
-        selected_route.students.select_related("assigned_stop").order_by("assigned_stop__descriptor", "name")
-        if selected_route else Student.objects.none()
-    )
-    form = None
-    if selected_route:
-        route, monitor = authorized_trip_route(request.user, selected_route.pk)
-        form = PrepareTripForm(route=route, assigned_monitor=monitor)
-    return render(
-        request,
-        "bus_tracker_app/admin/create_trip.html",
-        {
-            "routes": routes,
-            "selected_route": selected_route,
-            "monitors": (
-                selected_route.monitors.all() if is_admin else selected_route.monitors.filter(user=request.user)
-            ) if selected_route else Monitor.objects.none(),
-            "children": children,
-            "form": form,
-        },
-    )
+    return JsonResponse({
+        "routes": list(routes.values("id", "route_name")),
+        "selected_route": _preparation_options(request.user, selected_route) if selected_route else None,
+    })
 
 
 def authorized_trip_route(user, route_id):
@@ -76,15 +55,28 @@ def authorized_trip_route(user, route_id):
     return route, monitor
 
 
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.prepare_trip", raise_exception=True)
 @require_GET
 def prepare_trip_form(request, route_id):
-    route, monitor = authorized_trip_route(request.user, route_id)
-    form = PrepareTripForm(route=route, assigned_monitor=monitor)
-    return render(request, "bus_tracker_app/admin/prepare_trip.html", {"route": route, "form": form})
+    route = get_object_or_404(Route, pk=route_id)
+    return JsonResponse(_preparation_options(request.user, route))
 
 
+def _preparation_options(user, route):
+    route, monitor = authorized_trip_route(user, route.pk)
+    monitors = route.monitors.filter(pk=monitor.pk) if monitor else route.monitors.all()
+    return {
+        "route_id": route.pk,
+        "monitors": list(monitors.values("id", "name")),
+        "buses": list(Bus.objects.values("id", "license_plate")),
+        "students": list(route.students.values("id", "name", "assigned_stop_id")),
+        "legs": list(Trip.Leg.values),
+    }
+
+
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.prepare_trip", raise_exception=True)
 @require_POST
@@ -101,15 +93,10 @@ def prepare_trip(request, route_id):
             )
             if created:
                 trip.students.set(route.students.all())
-        if created:
-            messages.success(request, f"{trip} was prepared with the route's students.")
-        else:
-            messages.info(request, f"{trip} already exists; no details were changed.")
         if not request.user.has_perm("bus_tracker_app.manage_operational_data") and trip.monitor.user_id != request.user.pk:
-            messages.info(request, "The existing trip belongs to another monitor.")
-            return redirect("bus_tracker_app:trip_list")
-        return redirect("bus_tracker_app:trip_detail", trip_id=trip.pk)
-    return render(request, "bus_tracker_app/admin/prepare_trip.html", {"route": route, "form": form})
+            return JsonResponse({"error": "trip_assigned_to_another_monitor"}, status=409)
+        return JsonResponse({"trip": trip_data(trip), "created": created}, status=201 if created else 200)
+    return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
 
 
 @never_cache
@@ -127,33 +114,34 @@ def parent_live(request):
     trip = get_object_or_404(trips, pk=trip_id) if trip_id else (
         trips.filter(status=Trip.Status.ACTIVE).first() or trips.first()
     )
-    stop_map_url = None
-    if child:
-        lat, lon = child.assigned_stop.latitude, child.assigned_stop.longitude
-        if math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180:
-            stop_map_url = "https://www.openstreetmap.org/export/embed.html?" + urlencode({
-                "bbox": ",".join(str(value) for value in (
-                    max(-180, lon - .01), max(-90, lat - .01),
-                    min(180, lon + .01), min(90, lat + .01))),
-                "layer": "mapnik", "marker": f"{lat},{lon}",
-            })
-    return render(request, "bus_tracker_app/parents/live.html", {
-        "children": children, "child": child, "trips": trips, "trip": trip,
-        "stop_map_url": stop_map_url,
+    return JsonResponse({
+        "children": list(children.values("id", "name")),
+        "child": {
+            "id": child.pk,
+            "name": child.name,
+            "stop": {
+                "id": child.assigned_stop_id,
+                "name": child.assigned_stop.descriptor,
+                "latitude": child.assigned_stop.latitude,
+                "longitude": child.assigned_stop.longitude,
+            },
+        } if child else None,
+        "trips": [trip_data(item) for item in trips],
+        "trip": trip_data(trip) if trip else None,
     })
 
 
 CRUD_RESOURCES = {
     "parent-access": {
         "model": ParentChildAccess, "form": ParentChildAccessForm,
-        "label": "Parent-child access", "singular": "parent-child link",
+        "label": "Parent-child access",
     },
-    "routes": {"model": Route, "form": RouteForm, "label": "Routes", "singular": "route"},
-    "stops": {"model": Stop, "form": StopForm, "label": "Stops", "singular": "stop"},
-    "buses": {"model": Bus, "form": BusForm, "label": "Buses", "singular": "bus"},
-    "monitors": {"model": Monitor, "form": MonitorForm, "label": "Monitors", "singular": "monitor"},
-    "students": {"model": Student, "form": StudentForm, "label": "Students", "singular": "student"},
-    "trips": {"model": Trip, "form": TripForm, "label": "Trips", "singular": "trip"},
+    "routes": {"model": Route, "form": RouteForm, "label": "Routes"},
+    "stops": {"model": Stop, "form": StopForm, "label": "Stops"},
+    "buses": {"model": Bus, "form": BusForm, "label": "Buses"},
+    "monitors": {"model": Monitor, "form": MonitorForm, "label": "Monitors"},
+    "students": {"model": Student, "form": StudentForm, "label": "Students"},
+    "trips": {"model": Trip, "form": TripForm, "label": "Trips"},
 }
 
 
@@ -164,79 +152,76 @@ def get_resource(resource):
         raise Http404("Unknown management resource.") from error
 
 
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
+@require_GET
 def management_home(request):
     resources = [
         {"key": key, "label": config["label"], "count": config["model"].objects.count()}
         for key, config in CRUD_RESOURCES.items()
     ]
-    return render(request, "bus_tracker_app/crud/index.html", {"resources": resources})
+    return JsonResponse({"resources": resources})
 
 
+def _record_data(record, form_class):
+    fields = form_class.Meta.fields
+    data = model_to_dict(record, fields=fields)
+    for field in record._meta.many_to_many:
+        if field.name in data:
+            data[field.name] = [related.pk for related in data[field.name]]
+    return {"id": record.pk, **data}
+
+
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
+@require_GET
 def record_list(request, resource):
     config = get_resource(resource)
     records = config["model"].objects.all()
-    return render(
-        request,
-        "bus_tracker_app/crud/list.html",
-        {"resource": resource, "label": config["label"], "singular": config["singular"], "records": records},
-    )
+    return JsonResponse({"records": [_record_data(record, config["form"]) for record in records]})
 
 
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def record_create(request, resource):
-    config = get_resource(resource)
-    form = config["form"](request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        record = form.save()
-        messages.success(request, f"{record} was created.")
-        return redirect("bus_tracker_app:record_list", resource=resource)
-    return render(
-        request,
-        "bus_tracker_app/crud/form.html",
-        {"resource": resource, "label": config["label"], "singular": config["singular"], "form": form, "mode": "Create"},
-    )
+    form_class = get_resource(resource)["form"]
+    if request.method == "GET":
+        return JsonResponse({"fields": form_class.Meta.fields})
+    form = form_class(request.POST)
+    if not form.is_valid():
+        return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
+    return JsonResponse(_record_data(form.save(), form_class), status=201)
 
 
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def record_update(request, resource, pk):
     config = get_resource(resource)
     record = get_object_or_404(config["model"], pk=pk)
-    form = config["form"](request.POST or None, instance=record)
-    if request.method == "POST" and form.is_valid():
+    form_class = config["form"]
+    if request.method == "POST":
+        form = form_class(request.POST, instance=record)
+        if not form.is_valid():
+            return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
         record = form.save()
-        messages.success(request, f"{record} was updated.")
-        return redirect("bus_tracker_app:record_list", resource=resource)
-    return render(
-        request,
-        "bus_tracker_app/crud/form.html",
-        {"resource": resource, "label": config["label"], "singular": config["singular"], "form": form, "mode": "Edit", "record": record},
-    )
+    return JsonResponse(_record_data(record, form_class))
 
 
+@never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
-@require_http_methods(["GET", "POST"])
+@require_POST
 def record_delete(request, resource, pk):
     config = get_resource(resource)
     record = get_object_or_404(config["model"], pk=pk)
-    if request.method == "POST":
-        try:
-            record.delete()
-        except ProtectedError:
-            messages.error(request, "This record is still used elsewhere and cannot be deleted.")
-        else:
-            messages.success(request, f"{record} was deleted.")
-        return redirect("bus_tracker_app:record_list", resource=resource)
-    return render(
-        request,
-        "bus_tracker_app/crud/confirm_delete.html",
-        {"resource": resource, "label": config["label"], "singular": config["singular"], "record": record},
-    )
+    try:
+        record.delete()
+    except ProtectedError:
+        return JsonResponse({"error": "record_in_use"}, status=409)
+    return JsonResponse({"deleted": True})

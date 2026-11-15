@@ -26,7 +26,6 @@ class StartupTests(SimpleTestCase):
         server = dispatch.call_args_list[1]
         self.assertEqual(server.args, ("runserver", "0.0.0.0:8000"))
         self.assertIs(server.kwargs["use_reloader"], False)
-        self.assertIs(server.kwargs["insecure"], True)
 
     @patch("bus_tracker_app.management.commands.start.call_command")
     def test_configured_port_and_missing_database_directory(self, dispatch):

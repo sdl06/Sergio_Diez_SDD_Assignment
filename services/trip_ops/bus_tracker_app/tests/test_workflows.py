@@ -16,38 +16,33 @@ from .helpers import DomainCase
 import json
 
 
-class LoginRedirectTests(DomainCase):
-    def test_default_login_reaches_home_for_each_role(self):
-        for user in (self.admin, self.monitor_user, self.parent):
-            with self.subTest(username=user.username):
-                self.client.logout()
-                response = self.client.post("/accounts/login/", {
-                    "username": user.username, "password": "test-pass",
-                }, follow=True)
-                self.assertEqual(response.redirect_chain, [("/", 302)])
-                self.assertEqual(response.status_code, 200)
-                self.assertTemplateUsed(response, "bus_tracker_app/home.html")
-                self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+class LoginTests(DomainCase):
+    def test_login_issues_session_and_csrf_token(self):
+        client = Client(enforce_csrf_checks=True)
+        path = "/accounts/login/"
+        credentials = {"username": self.monitor_user.username, "password": "test-pass"}
+        self.assertEqual(client.post(path, credentials).status_code, 403)
+        token = client.get(path).json()["csrf_token"]
+        response = client.post(path, credentials, HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user_id"], self.monitor_user.pk)
+        self.assertEqual(client.get("/trips/").status_code, 200)
+        token = response.json()["csrf_token"]
+        self.assertEqual(client.post("/accounts/logout/", HTTP_X_CSRFTOKEN=token).status_code, 200)
+        self.assertEqual(client.get("/trips/").status_code, 401)
 
-    def test_login_preserves_local_next_destination(self):
+    def test_invalid_credentials_do_not_create_session(self):
         response = self.client.post("/accounts/login/", {
-            "username": self.monitor_user.username, "password": "test-pass",
-            "next": "/trips/",
+            "username": self.parent.username, "password": "wrong",
         })
-        self.assertRedirects(response, "/trips/")
-
-    def test_login_rejects_external_next_destination(self):
-        response = self.client.post("/accounts/login/", {
-            "username": self.parent.username, "password": "test-pass",
-            "next": "https://example.test/",
-        })
-        self.assertRedirects(response, "/")
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
 
 class PreparationTests(DomainCase):
     def test_permission_and_route_matrix(self):
         path = f"/routes/{self.route.pk}/prepare/submit/"
-        for user, expected in [(None, 302), (self.parent, 403), (self.other_user, 403)]:
+        for user, expected in [(None, 401), (self.parent, 403), (self.other_user, 403)]:
             self.client.logout()
             if user:
                 self.login(user)
@@ -65,13 +60,13 @@ class PreparationTests(DomainCase):
         self.login()
         path = f"/routes/{self.route.pk}/prepare/submit/"
         data = {"bus": self.bus.pk, "monitor": self.other_monitor.pk, "date": self.trip.date, "leg": 2}
-        self.assertEqual(self.client.post(path, data).status_code, 302)
+        self.assertEqual(self.client.post(path, data).status_code, 201)
         afternoon = Trip.objects.get(route=self.route, date=self.trip.date, leg=2)
         self.assertEqual(afternoon.monitor, self.monitor)
         self.assertSetEqual(set(afternoon.students.all()), {self.child, self.sibling})
-        self.assertEqual(self.client.post(path, data).status_code, 302)
+        self.assertEqual(self.client.post(path, data).status_code, 200)
         self.assertEqual(Trip.objects.count(), 2)
-        self.assertEqual(self.client.post(path, {**data, "bus": "bad"}).status_code, 200)
+        self.assertEqual(self.client.post(path, {**data, "bus": "bad"}).status_code, 400)
         self.assertEqual(self.client.get(path).status_code, 405)
 
     def test_admin_selection_and_existing_other_monitor(self):
@@ -83,7 +78,7 @@ class PreparationTests(DomainCase):
         self.login()
         response = self.client.post(f"/routes/{self.route.pk}/prepare/submit/", {
             "bus": self.bus.pk, "date": self.trip.date, "leg": 1})
-        self.assertRedirects(response, "/trips/")
+        self.assertEqual(response.status_code, 409)
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.monitor, self.other_monitor)
 
@@ -130,7 +125,7 @@ class LifecycleTests(DomainCase):
         self.assertEqual(self.client.post(f"/trips/{self.trip.pk}/complete/").status_code, 409)
         self.assertEqual(self.client.get(f"/trips/{self.trip.pk}/start/").status_code, 405)
         for action in ["start", "start", "complete", "complete"]:
-            self.assertEqual(self.client.post(f"/trips/{self.trip.pk}/{action}/").status_code, 302)
+            self.assertEqual(self.client.post(f"/trips/{self.trip.pk}/{action}/").status_code, 200)
         self.assertEqual(self.client.post(f"/trips/{self.trip.pk}/start/").status_code, 409)
 
 
@@ -227,27 +222,27 @@ class LocationTests(DomainCase):
 class ManagementTests(DomainCase):
     def test_crud_and_protected_delete(self):
         self.login(self.admin)
-        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.client.get("/").status_code, 404)
         self.assertEqual(self.client.get("/accounts/login/").status_code, 200)
         for resource in ["routes", "stops", "buses", "monitors", "students", "trips", "parent-access"]:
             self.assertEqual(self.client.get(f"/manage/{resource}/").status_code, 200)
             self.assertEqual(self.client.get(f"/manage/{resource}/new/").status_code, 200)
         self.assertEqual(self.client.get("/manage/unknown/").status_code, 404)
-        self.assertEqual(self.client.post("/manage/routes/new/", {"route_name": "New route"}).status_code, 302)
+        self.assertEqual(self.client.post("/manage/routes/new/", {"route_name": "New route"}).status_code, 201)
         route = Route.objects.get(route_name="New route")
         path = f"/manage/routes/{route.pk}"
         self.assertEqual(self.client.get(path + "/edit/").status_code, 200)
-        self.assertEqual(self.client.post(path + "/edit/", {"route_name": "Updated"}).status_code, 302)
+        self.assertEqual(self.client.post(path + "/edit/", {"route_name": "Updated"}).status_code, 200)
         route.refresh_from_db()
         self.assertEqual(route.route_name, "Updated")
-        self.assertEqual(self.client.post(path + "/edit/", {"route_name": ""}).status_code, 200)
-        self.assertEqual(self.client.get(path + "/delete/").status_code, 200)
+        self.assertEqual(self.client.post(path + "/edit/", {"route_name": ""}).status_code, 400)
+        self.assertEqual(self.client.get(path + "/delete/").status_code, 405)
         self.assertTrue(Route.objects.filter(pk=route.pk).exists())
-        self.assertEqual(self.client.post(path + "/delete/").status_code, 302)
+        self.assertEqual(self.client.post(path + "/delete/").status_code, 200)
         self.assertFalse(Route.objects.filter(pk=route.pk).exists())
-        self.client.post(f"/manage/routes/{self.route.pk}/delete/")
+        self.assertEqual(self.client.post(f"/manage/routes/{self.route.pk}/delete/").status_code, 409)
         self.assertTrue(Route.objects.filter(pk=self.route.pk).exists())
-        self.assertEqual(self.client.post("/manage/routes/new/", {"route_name": self.route.route_name}).status_code, 200)
+        self.assertEqual(self.client.post("/manage/routes/new/", {"route_name": self.route.route_name}).status_code, 400)
 
     def test_parent_page_scope_and_empty_states(self):
         self.login(self.outsider)
@@ -259,13 +254,13 @@ class ManagementTests(DomainCase):
             self.assertEqual(self.client.get("/parents/live/" + query).status_code, code)
         self.trip.status = "active"
         self.trip.save()
-        self.assertEqual(self.client.get("/parents/live/").context["trip"], self.trip)
+        self.assertEqual(self.client.get("/parents/live/").json()["trip"]["id"], self.trip.pk)
 
     def test_csrf_enforced_for_mutations(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.monitor_user)
         path = f"/trips/{self.trip.pk}/start/"
         self.assertEqual(client.post(path).status_code, 403)
-        client.get(f"/trips/{self.trip.pk}/")
+        client.get("/accounts/login/")
         token = client.cookies["trip_ops_csrftoken"].value
-        self.assertEqual(client.post(path, HTTP_X_CSRFTOKEN=token).status_code, 302)
+        self.assertEqual(client.post(path, HTTP_X_CSRFTOKEN=token).status_code, 200)

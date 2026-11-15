@@ -15,8 +15,7 @@ class AdministratorTrackingTests(DomainCase):
         self.login(self.admin)
         response = self.client.get("/parents/live/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.context["children"]), {self.child, self.sibling, self.foreign_child})
-        self.assertContains(response, "All journeys")
+        self.assertEqual({child["id"] for child in response.json()["children"]}, {self.child.pk, self.sibling.pk, self.foreign_child.pk})
 
     def test_admin_reads_location_and_eta_across_routes(self):
         other_trip = Trip.objects.create(route=self.other, bus=self.bus, monitor=self.other_monitor,
@@ -47,19 +46,18 @@ class AdministratorTrackingTests(DomainCase):
         self.assertEqual(self.client.get(path).status_code, 200)
 
 
-    def test_monitor_share_control_follows_status_and_permission(self):
+    def test_monitor_location_permission_is_reported_and_enforced(self):
         self.login()
         path = f"/trips/{self.trip.pk}/"
         response = self.client.get(path)
-        self.assertContains(response, "Start this trip to enable location sharing.")
-        self.assertContains(response, "data-share-start disabled")
-        self.assertNotContains(response, "data-location-sender")
+        self.assertTrue(response.json()["can_share"])
+        self.assertEqual(response.json()["status"], Trip.Status.PREPARED)
         self.trip.status = Trip.Status.ACTIVE
         self.trip.save()
-        self.assertContains(self.client.get(path), "data-location-sender")
+        self.assertEqual(self.client.get(path).json()["status"], Trip.Status.ACTIVE)
         self.monitor_user.user_permissions.remove(*self.monitor_user.user_permissions.filter(codename="post_trip_location"))
         response = self.client.get(path)
-        self.assertNotContains(response, "data-share-start")
+        self.assertFalse(response.json()["can_share"])
         self.assertEqual(self.json_post(f"/api/trips/{self.trip.pk}/locations/", self.fix()).status_code, 403)
 
 

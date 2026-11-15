@@ -41,12 +41,9 @@ CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get(
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
     'bus_tracker_app',
 ]
 
@@ -56,30 +53,13 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'trip_ops_project.urls'
-LOGIN_URL = 'bus_tracker_app:login'
-LOGIN_REDIRECT_URL = 'bus_tracker_app:home'
 SESSION_COOKIE_NAME = 'trip_ops_sessionid'
 CSRF_COOKIE_NAME = 'trip_ops_csrftoken'
-
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
+CSRF_FAILURE_VIEW = 'trip_ops_project.urls.csrf_failure'
 
 WSGI_APPLICATION = 'trip_ops_project.wsgi.application'
 
@@ -125,13 +105,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.1/howto/static-files/
-
-STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
 
 
 # Email

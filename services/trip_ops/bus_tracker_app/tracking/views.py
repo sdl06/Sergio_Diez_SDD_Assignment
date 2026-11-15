@@ -5,7 +5,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_GET, require_POST
 
+from ..auth import login_required
 from ..models import Trip
 from .eta import EtaProviderError, EtaResult, get_or_refresh_eta, scheduled_arrival_for
 from .models import TripLocation, TripStopEta

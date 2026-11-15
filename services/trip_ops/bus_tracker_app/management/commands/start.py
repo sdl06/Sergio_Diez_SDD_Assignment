@@ -25,9 +25,9 @@ class Command(BaseCommand):
             Path(database["NAME"]).parent.mkdir(parents=True, exist_ok=True)
 
         call_command("migrate", interactive=False, stdout=self.stdout, stderr=self.stderr)
-        # No reloader subprocess. Serve the committed CSS/JS even with DEBUG off.
+        # No reloader subprocess.
         # This is an assessment server, not a production deployment server.
         call_command(
-            "runserver", f"0.0.0.0:{port}", use_reloader=False, insecure=True,
+            "runserver", f"0.0.0.0:{port}", use_reloader=False,
             stdout=self.stdout, stderr=self.stderr,
         )

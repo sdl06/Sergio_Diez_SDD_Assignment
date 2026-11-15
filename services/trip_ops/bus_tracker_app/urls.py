@@ -1,24 +1,15 @@
-from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from . import views
+from . import auth, views
 from .trips import views as trip_views
-from .forms import StyledAuthenticationForm
 
 
 app_name = "bus_tracker_app"
 
 urlpatterns = [
-    path("", views.home, name="home"),
     path("api/", include("bus_tracker_app.tracking.urls")),
-    path(
-        "accounts/login/",
-        auth_views.LoginView.as_view(
-            template_name="registration/login.html", authentication_form=StyledAuthenticationForm
-        ),
-        name="login",
-    ),
-    path("accounts/logout/", auth_views.LogoutView.as_view(next_page="bus_tracker_app:home"), name="logout"),
+    path("accounts/login/", auth.login_view, name="login"),
+    path("accounts/logout/", auth.logout_view, name="logout"),
     path("admin/trips/new/", views.create_trip, name="create_trip"),
     path("routes/<int:route_id>/prepare/", views.prepare_trip_form, name="prepare_trip_form"),
     path("routes/<int:route_id>/prepare/submit/", views.prepare_trip, name="prepare_trip"),
