@@ -1,0 +1,7 @@
+services:
+  attendance:
+    build: ./servives/attendance
+    ports: ["8001:8000"]
+  trip_ops:
+    build: ./servies/trip_ops
+    ports: ["8002:8000"]
