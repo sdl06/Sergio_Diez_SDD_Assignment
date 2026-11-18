@@ -1,0 +1,19 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [attendance, trip_ops]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@6
+    
+      - name: Build the docker image
+        uses: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}

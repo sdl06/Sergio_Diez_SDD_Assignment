@@ -7,6 +7,7 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 COPY manage.py ./
 COPY attendance_project/ ./attendance_project
 COPY bus_tracker_app/ ./bus_tracker_app
+COPY --chmod=755 start.sh /app/start.sh
 
 RUN useradd --system --user-group app && chown app:app /app
 USER app
