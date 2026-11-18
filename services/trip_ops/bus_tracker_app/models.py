@@ -117,6 +117,7 @@ class Trip(models.Model):
             ("prepare_trip", "Can prepare trips"),
             ("manage_operational_data", "Can manage operational data"),
             ("post_trip_location", "Can post trip locations"),
+            ("record_trip_attendance", "Can record attendance for an assigned trip"),
         ]
 
     def clean(self):

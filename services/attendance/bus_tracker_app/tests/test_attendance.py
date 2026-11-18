@@ -1,4 +1,7 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
+from io import BytesIO
+import json
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from django.db import connection
@@ -72,9 +75,46 @@ class AttendanceTests(TestCase):
             self.record_url, {"status": "present"}, content_type="application/json",
             headers={"X-User-ID": "52"},
         )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"error": "authentication_required"})
+        self.assertEqual(self.client.get(self.roster_url).status_code, 401)
+        self.assertFalse(StudentAttendance.objects.exists())
+
+    @patch("bus_tracker_app.attendance.trip_context.build_opener")
+    def test_http_context_allows_an_authorized_write(self, build_opener):
+        self.client.cookies["trip_ops_sessionid"] = "test-session"
+        self.client.cookies["trip_ops_csrftoken"] = "test-cookie"
+        payload = asdict(self.monitor)
+        payload["parent_child_ids"] = []
+        transport = build_opener.return_value
+        transport.open.return_value = BytesIO(json.dumps(payload).encode())
+        response = self.client.post(
+            self.record_url, {"status": "present"}, content_type="application/json",
+            headers={"X-CSRFToken": "test-token"},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(StudentAttendance.objects.get().recorded_by_id, 52)
+        outbound = transport.open.call_args.args[0]
+        self.assertEqual(outbound.get_method(), "POST")
+        self.assertTrue(outbound.full_url.endswith("/api/trips/30/attendance-context/"))
+        self.assertIn("trip_ops_sessionid=test-session", outbound.get_header("Cookie"))
+        self.assertEqual(outbound.get_header("X-csrftoken"), "test-token")
+        self.assertGreater(transport.open.call_args.kwargs["timeout"], 0)
+
+    @patch("bus_tracker_app.attendance.trip_context.build_opener")
+    def test_timeout_and_upstream_denials_leave_attendance_unchanged(self, build_opener):
+        self.client.cookies["trip_ops_sessionid"] = "test-session"
+        transport = build_opener.return_value
+        transport.open.side_effect = TimeoutError
+        response = self.post(self.record_url, {"status": "present"})
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "trip_context_unavailable"})
-        self.assertEqual(self.client.get(self.roster_url).status_code, 503)
+        for status in (401, 403, 404):
+            with self.subTest(status=status):
+                transport.open.side_effect = HTTPError(
+                    "http://trip-ops", status, "denied", {}, BytesIO(),
+                )
+                self.assertEqual(self.post(self.record_url, {"status": "present"}).status_code, status)
         self.assertFalse(StudentAttendance.objects.exists())
 
     def test_migration_creates_only_attendance_tables_without_foreign_keys(self):

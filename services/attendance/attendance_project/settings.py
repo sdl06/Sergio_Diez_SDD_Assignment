@@ -7,6 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or token_urlsafe(48)
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() in {"true", "1", "yes"}
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+TRIP_OPS_BASE_URL = os.environ.get("TRIP_OPS_BASE_URL", "http://127.0.0.1:8002")
+TRIP_OPS_TIMEOUT_SECONDS = float(os.environ.get("TRIP_OPS_TIMEOUT_SECONDS", "3"))
 
 INSTALLED_APPS = ["bus_tracker_app"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware"]

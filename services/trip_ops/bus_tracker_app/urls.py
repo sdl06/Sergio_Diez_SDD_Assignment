@@ -8,6 +8,11 @@ app_name = "bus_tracker_app"
 
 urlpatterns = [
     path("api/", include("bus_tracker_app.tracking.urls")),
+    path(
+        "api/trips/<int:trip_id>/attendance-context/",
+        trip_views.attendance_context,
+        name="attendance_context",
+    ),
     path("accounts/login/", auth.login_view, name="login"),
     path("accounts/logout/", auth.logout_view, name="logout"),
     path("admin/trips/new/", views.create_trip, name="create_trip"),

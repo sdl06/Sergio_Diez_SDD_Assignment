@@ -17,6 +17,7 @@ Trip Operations serves backend routes at `http://127.0.0.1:8002`. The separate f
 - `GET /manage/` lists operational resources. Use the routes under `/manage/<resource>/` to read, create, update, or delete records. Create and update accept form-encoded fields. Create monitor and parent accounts and assign permissions through Django's management shell. Link accounts through the monitor and parent access records.
 - `GET /routes/<route_id>/prepare/` returns trip preparation options. Submit the chosen values as form data to `POST /routes/<route_id>/prepare/submit/`. Use `/trips/` and `/trips/<trip_id>/` to read trips, and POST to the trip's `start/` or `complete/` route to change its state.
 - `GET /parents/live/` returns the caller's children and trips. Monitor GPS submissions and parent location and ETA reads are under `/api/`.
+- Attendance calls `/api/trips/<trip_id>/attendance-context/` with the caller's Trip Operations session. It uses GET for reads and POST with CSRF for write checks. Run migrations and grant each attending monitor the **Can record attendance for an assigned trip** permission. The endpoint checks the assigned monitor and limits a parent's result to their linked children.
 
 The initial migration starts an empty SQLite database at `services/trip_ops/db.sqlite3`. To use another directory, set `TRIP_OPS_DATA_DIR` to a directory reserved for this project. Assignment 1 records have not been imported.
 

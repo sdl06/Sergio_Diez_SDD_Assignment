@@ -13,7 +13,7 @@ from .services import (
     AttendanceStateError, build_attendance_roster,
     get_absence_state, record_attendance, set_absence_notice,
 )
-from .trip_context import TripContextUnavailable, get_trip_context
+from .trip_context import TripAuthenticationRequired, TripContextUnavailable, get_trip_context
 from .validators import AttendancePayloadError, parse_absent_json, parse_attendance_json
 
 
@@ -26,6 +26,8 @@ def _api_errors(view):
     def wrapped(*args, **kwargs):
         try:
             return view(*args, **kwargs)
+        except TripAuthenticationRequired:
+            return _json({"error": "authentication_required"}, 401)
         except PermissionDenied:
             return _json({"error": "permission_denied"}, 403)
         except Http404:

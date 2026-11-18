@@ -1,7 +1,15 @@
 services:
   attendance:
-    build: ./servives/attendance
+    build: ./services/attendance
     ports: ["8001:8000"]
+    environment:
+      TRIP_OPS_BASE_URL: http://trip-ops:8000
   trip_ops:
-    build: ./servies/trip_ops
+    build: ./services/trip_ops
     ports: ["8002:8000"]
+    environment:
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,trip-ops
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8001,http://127.0.0.1:8001
+    networks:
+      default:
+        aliases: [trip-ops]
