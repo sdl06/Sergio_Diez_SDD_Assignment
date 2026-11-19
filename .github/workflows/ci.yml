@@ -13,7 +13,7 @@ jobs:
         service: [attendance, trip_ops]
     steps:
       - name: Check out the repository
-        uses: actions/checkout@6
+        uses: actions/checkout@v6
     
       - name: Build the docker image
         run: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}
