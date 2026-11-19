@@ -16,4 +16,4 @@ jobs:
         uses: actions/checkout@6
     
       - name: Build the docker image
-        uses: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}
+        run: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}
