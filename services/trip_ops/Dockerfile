@@ -1,6 +1,20 @@
 FROM python:3.14.2-slim-bookworm
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg \
+    && curl -fsSL \
+        https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb \
+        -o /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
+        msodbcsql18 unixodbc-dev \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
@@ -13,4 +27,4 @@ RUN useradd --system --user-group app && chown app:app /app
 USER app
 
 EXPOSE 8000
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000", "--noreload"]
+CMD ["/app/start.sh"]
