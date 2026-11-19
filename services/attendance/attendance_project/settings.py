@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from secrets import token_urlsafe
+from urllib.parse import unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -16,11 +17,25 @@ MIDDLEWARE = ["django.middleware.security.SecurityMiddleware"]
 ROOT_URLCONF = "attendance_project.urls"
 WSGI_APPLICATION = "attendance_project.wsgi.application"
 
+database_url = urlparse(os.environ["DATABASE_URL"])
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "mssql",
+        "HOST": database_url.hostname,
+        "PORT": database_url.port or 1433,
+        "NAME": database_url.path.lstrip("/"),
+        "USER": unquote(database_url.username or ""),
+        "PASSWORD": unquote(database_url.password or ""),
+        "OPTIONS": {
+            "driver": "ODBC Driver 18 for SQL Server",
+            "extra_params": os.environ.get(
+                "SQL_EXTRA_PARAMS",
+                "Encrypt=yes;TrustServerCertificate=no",
+            ),
+        },
     },
 }
+
 TIME_ZONE = "UTC"
 USE_TZ = True

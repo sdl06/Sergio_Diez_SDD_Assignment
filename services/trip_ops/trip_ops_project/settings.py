@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 from secrets import token_urlsafe
-
+from urllib.parse import unquote, urlparse
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -68,11 +68,24 @@ WSGI_APPLICATION = 'trip_ops_project.wsgi.application'
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
 DATA_DIR = Path(os.environ.get('TRIP_OPS_DATA_DIR', str(BASE_DIR))).expanduser().resolve()
+database_url = urlparse(os.environ["DATABASE_URL"])
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': DATA_DIR / 'db.sqlite3',
-    }
+    "default": {
+        "ENGINE": "mssql",
+        "HOST": database_url.hostname,
+        "PORT": database_url.port or 1433,
+        "NAME": database_url.path.lstrip("/"),
+        "USER": unquote(database_url.username or ""),
+        "PASSWORD": unquote(database_url.password or ""),
+        "OPTIONS": {
+            "driver": "ODBC Driver 18 for SQL Server",
+            "extra_params": os.environ.get(
+                "SQL_EXTRA_PARAMS",
+                "Encrypt=yes;TrustServerCertificate=no",
+            ),
+        },
+    },
 }
 
 
