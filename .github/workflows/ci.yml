@@ -17,3 +17,39 @@ jobs:
     
       - name: Build the docker image
         run: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}
+  publish:
+    name: Publish ${{ matrix.service }}
+    needs: build
+    if: github.event_name == 'push' && github-ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [attendance, trip_ops]
+
+    steps:
+      - name: Check out the repository
+      uses: actions/checkout@v6
+
+      - name: Set up docker Buildx
+      uses: docker/setup-buildx-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and publish the image
+      uses: docker/build-push-action@v7
+      with:
+        context: ./services/${{ matrix.service }}
+        platforms: linux/amd64
+        push: true
+        provenance: false
+        tags: ghcr.io/sdl06/schoolrun-${{ matrix.service }}:${{ github.sha }}
+        labels: |
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}    
