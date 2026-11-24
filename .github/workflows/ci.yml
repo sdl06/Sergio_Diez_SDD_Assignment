@@ -55,4 +55,136 @@ jobs:
           provenance: false
           tags: ghcr.io/sdl06/schoolrun-${{ matrix.service }}:${{ github.sha }}
           labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }} 
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  deploy:
+    name: Deploy to Azure
+    needs: publish
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    concurrency:
+      group: schoolrun-azure
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+    env:
+      PREFIX: ${{ vars.PREFIX }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+    steps:
+      - name: Check deployment configuration and image availability
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ATTENDANCE_DATABASE_URL: ${{ secrets.ATTENDANCE_DATABASE_URL }}
+          TRIP_OPS_DATABASE_URL: ${{ secrets.TRIP_OPS_DATABASE_URL }}
+          ATTENDANCE_DJANGO_SECRET_KEY: ${{ secrets.ATTENDANCE_DJANGO_SECRET_KEY }}
+          TRIP_OPS_DJANGO_SECRET_KEY: ${{ secrets.TRIP_OPS_DJANGO_SECRET_KEY }}
+        run: |
+          for name in PREFIX RESOURCE_GROUP AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+              ATTENDANCE_DATABASE_URL TRIP_OPS_DATABASE_URL ATTENDANCE_DJANGO_SECRET_KEY TRIP_OPS_DJANGO_SECRET_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Set ${name} in the repository's Actions settings."
+              exit 1
+            fi
+          done
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          prefix = os.environ["PREFIX"]
+          for service in ("attendance", "trip-ops"):
+              name = service.upper().replace("-", "_") + "_DATABASE_URL"
+              try:
+                  url = urlsplit(os.environ[name])
+                  valid = (
+                      url.scheme == "mssql"
+                      and url.hostname == f"{prefix}-sql.database.windows.net"
+                      and url.port in (1433, None)
+                      and url.path == f"/{prefix}-{service}-db"
+                      and url.username
+                      and url.password
+                      and not url.query
+                      and not url.fragment
+                  )
+              except ValueError:
+                  valid = False
+              if not valid:
+                  raise SystemExit(f"::error::{name} must contain the Azure SQL credentials and database for {service}.")
+          PY
+
+          for service in attendance trip_ops; do
+            image="ghcr.io/sdl06/schoolrun-${service}:${GITHUB_SHA}"
+            if ! docker manifest inspect "$image" >/dev/null; then
+              echo "::error::Azure needs anonymous pull access to $image. Check the GHCR package visibility."
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy both Django services
+        env:
+          ATTENDANCE_DATABASE_URL: ${{ secrets.ATTENDANCE_DATABASE_URL }}
+          TRIP_OPS_DATABASE_URL: ${{ secrets.TRIP_OPS_DATABASE_URL }}
+          ATTENDANCE_DJANGO_SECRET_KEY: ${{ secrets.ATTENDANCE_DJANGO_SECRET_KEY }}
+          TRIP_OPS_DJANGO_SECRET_KEY: ${{ secrets.TRIP_OPS_DJANGO_SECRET_KEY }}
+          AZURE_CORE_OUTPUT: none
+        run: |
+          app_host() {
+            az containerapp show --resource-group "$RESOURCE_GROUP" --name "$1" \
+              --query 'properties.configuration.ingress.fqdn' --output tsv
+          }
+
+          deploy() {
+            local app="$1" image_service="$2" host="$3" database_url="$4" secret_key="$5"
+            shift 5
+            az containerapp secret set --resource-group "$RESOURCE_GROUP" --name "$app" \
+              --secrets "database-url=$database_url" "django-secret-key=$secret_key" --output none
+            az containerapp ingress update --resource-group "$RESOURCE_GROUP" --name "$app" \
+              --target-port 8000 --output none
+            az containerapp update --resource-group "$RESOURCE_GROUP" --name "$app" \
+              --image "ghcr.io/sdl06/schoolrun-${image_service}:${GITHUB_SHA}" \
+              --min-replicas 0 --max-replicas 1 --output none \
+              --set-env-vars \
+                "DATABASE_URL=secretref:database-url" "DJANGO_SECRET_KEY=secretref:django-secret-key" \
+                "DJANGO_ALLOWED_HOSTS=$host" "DJANGO_DEBUG=false" "APP_VERSION=$GITHUB_SHA" "$@"
+          }
+
+          trip_ops_app="$PREFIX-trip-ops"
+          attendance_app="$PREFIX-attendance"
+          trip_ops_host=$(app_host "$trip_ops_app")
+          attendance_host=$(app_host "$attendance_app")
+          if [[ -z "$trip_ops_host" || -z "$attendance_host" ]]; then
+            echo "::error::Both Container Apps must have HTTP ingress enabled."
+            exit 1
+          fi
+
+          deploy "$trip_ops_app" trip_ops "$trip_ops_host" "$TRIP_OPS_DATABASE_URL" "$TRIP_OPS_DJANGO_SECRET_KEY" \
+            "DJANGO_CSRF_TRUSTED_ORIGINS=https://$attendance_host"
+          deploy "$attendance_app" attendance "$attendance_host" "$ATTENDANCE_DATABASE_URL" "$ATTENDANCE_DJANGO_SECRET_KEY" \
+            "TRIP_OPS_BASE_URL=https://$trip_ops_host"
+
+          wait_for_health() {
+            local host="$1" deadline=$((SECONDS + 300))
+            while (( SECONDS < deadline )); do
+              if curl --fail --silent --max-time 15 "https://$host/health" |
+                  jq --exit-status --arg sha "$GITHUB_SHA" '.status == "ok" and .db == "ok" and .version == $sha' >/dev/null; then
+                echo "$host is healthy on $GITHUB_SHA."
+                return 0
+              fi
+              sleep 10
+            done
+            echo "::error::$host did not report healthy for $GITHUB_SHA within five minutes."
+            return 1
+          }
+
+          wait_for_health "$trip_ops_host"
+          wait_for_health "$attendance_host"

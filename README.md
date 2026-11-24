@@ -104,3 +104,29 @@ SMART planning helped but was only partly successful:
 The SDLC was iterative and incremental: models, CRUD, tracking, and attendance were built and reviewed in stages. Most unit, integration, and end-to-end testing came late, exposing defects that required changes.
 
 The developer led most design while Codex agents implemented much of it. This caused some unwanted Markdown files, tests, and changes to predetermined data, subsequently fixed by the developer, as seen in commits.
+
+## Assignment 2 backend deployment
+
+The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each app uses ingress port 8000, applies its committed migrations on startup, and reports its own database status and deployed SHA at `/health`.
+
+Configure these values under **Settings → Secrets and variables → Actions** in GitHub.
+
+| Type | Name | Value |
+| --- | --- | --- |
+| Variable | `PREFIX` | `sdiez-ieu2024` |
+| Variable | `RESOURCE_GROUP` | `rg-sdiez-ieu2024` |
+| Secret | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Client and tenant IDs for the Azure deployment identity and the Azure subscription ID |
+| Secret | `ATTENDANCE_DATABASE_URL`, `TRIP_OPS_DATABASE_URL` | Azure SQL connection URL for each service, using a dedicated database user with permissions to apply migrations and access app data |
+| Secret | `ATTENDANCE_DJANGO_SECRET_KEY`, `TRIP_OPS_DJANGO_SECRET_KEY` | Separate random, stable Django secret keys |
+
+Use `mssql://<user>:<password>@sdiez-ieu2024-sql.database.windows.net:1433/<database>` for the database URLs. Percent-encode special characters in the username and password. The database names are `sdiez-ieu2024-attendance-db` and `sdiez-ieu2024-trip-ops-db`.
+
+The `sdiez-ieu2024-github` managed identity trusts this repository's `main` branch via OIDC and has Contributor access in `rg-sdiez-ieu2024`. Retrieve the three Azure IDs with the CLI.
+
+```sh
+az identity show --resource-group rg-sdiez-ieu2024 --name sdiez-ieu2024-github \
+  --query '{AZURE_CLIENT_ID:clientId,AZURE_TENANT_ID:tenantId}' --output json
+az account show --query '{AZURE_SUBSCRIPTION_ID:id}' --output json
+```
+
+Both GHCR packages, `schoolrun-attendance` and `schoolrun-trip_ops`, must allow anonymous pulls for the existing Container Apps to fetch their images.

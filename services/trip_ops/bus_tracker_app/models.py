@@ -128,5 +128,10 @@ class Trip(models.Model):
         return f"{self.route} · {self.date:%d %b %Y} · {self.get_leg_display()}"
 
 
+class DatabaseHealthCheck(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True)
+    checked_at = models.DateTimeField()
+
+
 # Register tracking models after their trip and stop dependencies.
 from .tracking.models import ParentChildAccess, TripLocation, TripStopEta  # noqa: E402, F401

@@ -36,6 +36,10 @@ ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get(
     'DJANGO_CSRF_TRUSTED_ORIGINS', ''
 ).split(',') if origin.strip()]
+if os.environ.get("CONTAINER_APP_NAME"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
