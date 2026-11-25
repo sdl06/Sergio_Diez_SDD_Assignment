@@ -1,5 +1,5 @@
 asgiref==3.12.1
-coverage==7.16.1
+coverage==7.17.4
 Django==6.1.1
 django-rest-framework==0.1.0
 djangorestframework==3.18.1
