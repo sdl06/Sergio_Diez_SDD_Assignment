@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directories:
+      - /
+      - /services/attendance
+      - /services/trip_ops
+    schedule:
+      interval: weekly

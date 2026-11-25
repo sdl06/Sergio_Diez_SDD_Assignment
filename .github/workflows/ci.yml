@@ -3,8 +3,46 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  sast:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Scan source code and report findings
+        run: |
+          python -m pip install semgrep==1.186.0
+          semgrep scan --config p/default --metrics=off --disable-version-check .
+
+  sca:
+    name: Python SCA (${{ matrix.service }})
+    needs: sast
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [attendance, trip_ops]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14.2'
+      - name: Audit service dependencies
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          python -m pip install pip-audit==2.10.1
+          pip-audit --strict --requirement "services/$SERVICE/requirements.txt"
+
   build:
     name: Build ${{ matrix.service }}
+    needs: sca
     runs-on: ubuntu-latest
 
     strategy:
@@ -14,9 +52,50 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6
-    
+        with:
+          persist-credentials: false
+
       - name: Build the docker image
-        run: docker build -t schoolrun-${{ matrix.service }} ./services/${{ matrix.service }}
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          docker build --platform linux/amd64 --provenance=false \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "schoolrun-$SERVICE" "./services/$SERVICE"
+
+      - name: Run passive ZAP DAST
+        timeout-minutes: 10
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: bash .github/scan-with-zap.sh
+
+      - name: Upload ZAP report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-${{ matrix.service }}
+          path: ${{ runner.temp }}/zap-report.html
+          if-no-files-found: ignore
+          overwrite: true
+
+      - name: Save the scanned image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: docker save "schoolrun-$SERVICE" | gzip > "$RUNNER_TEMP/schoolrun-image.tar.gz"
+
+      - name: Transfer the scanned image to the publish job
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-${{ matrix.service }}
+          path: ${{ runner.temp }}/schoolrun-image.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+
   publish:
     name: Publish ${{ matrix.service }}
     needs: build
@@ -33,11 +112,11 @@ jobs:
         service: [attendance, trip_ops]
 
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Download the scanned image
+        uses: actions/download-artifact@v8
+        with:
+          name: image-${{ matrix.service }}
+          path: ${{ runner.temp }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -46,16 +125,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish the image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./services/${{ matrix.service }}
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          tags: ghcr.io/sdl06/schoolrun-${{ matrix.service }}:${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - name: Publish the scanned image
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          docker load --input "$RUNNER_TEMP/schoolrun-image.tar.gz"
+          image="ghcr.io/sdl06/schoolrun-$SERVICE:$GITHUB_SHA"
+          docker tag "schoolrun-$SERVICE" "$image"
+          docker push "$image"
 
   deploy:
     name: Deploy to Azure

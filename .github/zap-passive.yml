@@ -1,0 +1,34 @@
+env:
+  contexts:
+    - name: SchoolRun
+      urls:
+        - http://schoolrun-app:8000
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      scanOnlyInScope: true
+
+  - type: requestor
+    requests:
+      - name: Database health
+        url: http://schoolrun-app:8000/health
+        method: GET
+        responseCode: 200
+      - name: Public API response
+        url: "http://schoolrun-app:8000${ZAP_PROBE_PATH}"
+        method: GET
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: /tmp
+      reportFile: zap-report.html
+
+  - type: exitStatus
+    parameters:
+      errorLevel: High
