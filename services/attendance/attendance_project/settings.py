@@ -14,7 +14,7 @@ ALLOWED_HOSTS = [
 ]
 TRIP_OPS_BASE_URL = os.environ.get("TRIP_OPS_BASE_URL", "http://127.0.0.1:8002")
 TRIP_OPS_TIMEOUT_SECONDS = float(os.environ.get("TRIP_OPS_TIMEOUT_SECONDS", "3"))
-UI_ORIGIN = os.environ.get("UI_ORIGIN", "").strip()
+UI_ORIGIN = "https://sdiezieu2024ui.z28.web.core.windows.net"
 CORS_ALLOWED_ORIGINS = [UI_ORIGIN] if UI_ORIGIN else []
 CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS"]
 CORS_ALLOW_HEADERS = ["authorization", "content-type"]

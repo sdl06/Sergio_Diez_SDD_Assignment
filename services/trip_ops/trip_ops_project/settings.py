@@ -36,7 +36,7 @@ ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get(
     'DJANGO_CSRF_TRUSTED_ORIGINS', ''
 ).split(',') if origin.strip()]
-UI_ORIGIN = os.environ.get("UI_ORIGIN", "").strip()
+UI_ORIGIN = "https://sdiezieu2024ui.z28.web.core.windows.net"
 CORS_ALLOWED_ORIGINS = [UI_ORIGIN] if UI_ORIGIN else []
 CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS"]
 CORS_ALLOW_HEADERS = ["authorization", "content-type"]
