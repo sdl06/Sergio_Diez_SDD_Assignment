@@ -1,0 +1,55 @@
+rules:
+  - id: request-data-in-code-or-shell
+    message: Request data reaches code or shell execution. Use a fixed operation and validate inputs.
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    pattern-sources: &django_request_data
+      - pattern-either:
+          - pattern: request.GET
+          - pattern: request.POST
+          - pattern: request.body
+          - pattern: request.headers
+          - pattern: request.COOKIES
+          - pattern: request.FILES
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($INPUT, ...)
+              - pattern: exec($INPUT, ...)
+              - pattern: os.system($INPUT)
+              - pattern: os.popen($INPUT, ...)
+              - pattern: subprocess.$FUNCTION($INPUT, ..., shell=True, ...)
+              - pattern: subprocess.$FUNCTION(args=$INPUT, ..., shell=True, ...)
+          - focus-metavariable: $INPUT
+
+  - id: request-data-in-raw-sql
+    message: Request data reaches raw SQL text. Use a Django QuerySet or pass the data as bound query parameters.
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    pattern-sources: *django_request_data
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CURSOR.execute($QUERY, ...)
+              - pattern: $CURSOR.executemany($QUERY, ...)
+              - pattern: $MODEL.objects.raw($QUERY, ...)
+              - pattern: django.db.models.expressions.RawSQL($QUERY, ...)
+          - focus-metavariable: $QUERY
+
+  - id: request-data-in-unsafe-deserialization
+    message: Request data reaches an unsafe deserializer. Use JSON or a safe loader with input validation.
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    pattern-sources: *django_request_data
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: pickle.load($DATA, ...)
+              - pattern: pickle.loads($DATA, ...)
+              - pattern: yaml.unsafe_load($DATA, ...)
+              - pattern: yaml.load($DATA, ..., Loader=yaml.Loader, ...)
+              - pattern: yaml.load($DATA, ..., Loader=yaml.UnsafeLoader, ...)
+          - focus-metavariable: $DATA
