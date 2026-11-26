@@ -1,8 +1,14 @@
 services:
+  ui:
+    image: nginx:alpine
+    ports: ["8080:80"]
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
   attendance:
     build: ./services/attendance
     ports: ["8001:8000"]
     environment:
+      UI_ORIGIN: "${SCHOOLRUN_UI_ORIGIN:-http://localhost:8080}"
       TRIP_OPS_BASE_URL: http://trip-ops:8000
       DATABASE_URL: "${ATTENDANCE_DATABASE_URL:?Set ATTENDANCE_DATABASE_URL}"
       SQL_EXTRA_PARAMS: "Encrypt=yes;TrustServerCertificate=yes"
@@ -10,6 +16,7 @@ services:
     build: ./services/trip_ops
     ports: ["8002:8000"]
     environment:
+      UI_ORIGIN: "${SCHOOLRUN_UI_ORIGIN:-http://localhost:8080}"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,trip-ops
       DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8001,http://127.0.0.1:8001
       DATABASE_URL: "${TRIP_OPS_DATABASE_URL:?Set TRIP_OPS_DATABASE_URL}"

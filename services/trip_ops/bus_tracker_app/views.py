@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -128,6 +129,9 @@ def parent_live(request):
         } if child else None,
         "trips": [trip_data(item) for item in trips],
         "trip": trip_data(trip) if trip else None,
+        "can_report_absence": bool(child and ParentChildAccess.objects.filter(
+            user=request.user, student=child,
+        ).exists()),
     })
 
 
@@ -173,6 +177,24 @@ def _record_data(record, form_class):
     return {"id": record.pk, **data}
 
 
+def _form_fields(form):
+    field_types = {forms.DateField: "date", forms.TimeField: "time", forms.IntegerField: "number"}
+    fields = []
+    for name, field in form.fields.items():
+        info = {
+            "name": name,
+            "label": field.label,
+            "required": field.required,
+            "type": field_types.get(type(field), "text"),
+            "value": form[name].value(),
+        }
+        if isinstance(field, forms.ChoiceField):
+            info["choices"] = [{"value": str(value), "label": str(label)} for value, label in field.choices]
+            info["multiple"] = field.widget.allow_multiple_selected
+        fields.append(info)
+    return fields
+
+
 @never_cache
 @login_required
 @permission_required("bus_tracker_app.manage_operational_data", raise_exception=True)
@@ -190,7 +212,7 @@ def record_list(request, resource):
 def record_create(request, resource):
     form_class = get_resource(resource)["form"]
     if request.method == "GET":
-        return JsonResponse({"fields": form_class.Meta.fields})
+        return JsonResponse({"fields": form_class.Meta.fields, "form": _form_fields(form_class())})
     form = form_class(request.POST)
     if not form.is_valid():
         return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
@@ -205,12 +227,15 @@ def record_update(request, resource, pk):
     config = get_resource(resource)
     record = get_object_or_404(config["model"], pk=pk)
     form_class = config["form"]
-    if request.method == "POST":
-        form = form_class(request.POST, instance=record)
-        if not form.is_valid():
-            return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
-        record = form.save()
-    return JsonResponse(_record_data(record, form_class))
+    if request.method == "GET":
+        return JsonResponse({
+            **_record_data(record, form_class),
+            "form": _form_fields(form_class(instance=record)),
+        })
+    form = form_class(request.POST, instance=record)
+    if not form.is_valid():
+        return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
+    return JsonResponse(_record_data(form.save(), form_class))
 
 
 @never_cache

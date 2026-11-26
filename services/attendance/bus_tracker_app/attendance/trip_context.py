@@ -46,23 +46,25 @@ class NoRedirects(HTTPRedirectHandler):
 
 
 def get_trip_context(request: HttpRequest, trip_id: int) -> TripContext:
-    if not request.COOKIES.get("trip_ops_sessionid"):
+    authorization = request.headers.get("Authorization")
+    if not authorization and not request.COOKIES.get("trip_ops_sessionid"):
         raise TripAuthenticationRequired
 
-    cookies = SimpleCookie()
-    for name in ("trip_ops_sessionid", "trip_ops_csrftoken"):
-        if name in request.COOKIES:
-            cookies[name] = request.COOKIES[name]
-    headers = {
-        "Accept": "application/json",
-        "Cookie": "; ".join(cookie.OutputString() for cookie in cookies.values()),
-    }
+    headers = {"Accept": "application/json"}
     writing = request.method == "POST"
-    if writing:
-        # Trip Operations checks CSRF against the caller's original browser request.
-        for name in ("X-CSRFToken", "Origin", "Referer"):
-            if name in request.headers:
-                headers[name] = request.headers[name]
+    if authorization:
+        headers["Authorization"] = authorization
+    else:
+        cookies = SimpleCookie()
+        for name in ("trip_ops_sessionid", "trip_ops_csrftoken"):
+            if name in request.COOKIES:
+                cookies[name] = request.COOKIES[name]
+        headers["Cookie"] = "; ".join(cookie.OutputString() for cookie in cookies.values())
+        if writing:
+            # Trip Operations checks CSRF against the caller's original cookie-authenticated request.
+            for name in ("X-CSRFToken", "Origin", "Referer"):
+                if name in request.headers:
+                    headers[name] = request.headers[name]
 
     base_url = settings.TRIP_OPS_BASE_URL.rstrip("/")
     outbound = Request(

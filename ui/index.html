@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SchoolRun bus trip management and live journey updates">
+  <title>SchoolRun</title>
+  <link rel="stylesheet" href="css/output.css">
+  <link rel="stylesheet" href="css/schoolrun.css">
+  <script src="config.js" defer></script>
+  <script src="js/app.js" type="module"></script>
+</head>
+<body class="min-h-full bg-slate-50 text-slate-950 antialiased">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="border-b border-slate-200 bg-white">
+    <nav class="site-nav mx-auto max-w-7xl px-4 py-4" aria-label="Main navigation">
+      <strong class="text-base font-bold">SchoolRun</strong>
+      <div id="navigation" class="actions" hidden>
+        <button type="button" data-page="trips">Saved trips</button>
+        <button type="button" data-page="prepare">Prepare trip</button>
+        <button type="button" data-page="parent">Parent view</button>
+        <button type="button" data-page="manage">Manage data</button>
+        <button type="button" id="sign-out">Sign out</button>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="mx-auto max-w-7xl px-4 py-10">
+    <section id="sign-in" class="panel login-panel" aria-labelledby="sign-in-title">
+      <h1 id="sign-in-title" class="text-3xl font-bold">Sign in</h1>
+      <form id="login-form" class="fields">
+        <label>Username <input name="username" autocomplete="username" required></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+      <p id="login-status" role="status" aria-live="polite"></p>
+    </section>
+    <div id="view"></div>
+  </main>
+  <footer class="border-t border-slate-200 bg-white">
+    <div class="site-nav mx-auto max-w-7xl px-4 py-6 text-sm text-slate-500">
+      <p>SchoolRun · Journey updates</p>
+      <p>GPS positions and arrival estimates are approximate.</p>
+    </div>
+  </footer>
+  <template id="location-panel">
+    <section class="panel">
+      <h2>Share bus location</h2>
+      <div class="actions">
+        <button type="button" class="primary" data-share-start>Share location</button>
+        <button type="button" data-share-stop hidden>Stop sharing</button>
+      </div>
+      <p data-share-status role="status">Location sharing is off.</p>
+      <p data-share-last class="muted"></p>
+    </section>
+  </template>
+</body>
+</html>

@@ -81,6 +81,23 @@ class AttendanceTests(TestCase):
         self.assertFalse(StudentAttendance.objects.exists())
 
     @patch("bus_tracker_app.attendance.trip_context.build_opener")
+    def test_browser_write_forwards_only_bearer_authentication(self, build_opener):
+        self.client.cookies["trip_ops_sessionid"] = "legacy-cookie"
+        payload = asdict(self.monitor)
+        payload["parent_child_ids"] = []
+        transport = build_opener.return_value
+        transport.open.return_value = BytesIO(json.dumps(payload).encode())
+        response = self.client.post(
+            self.record_url, {"status": "present"}, content_type="application/json",
+            headers={"Authorization": "Bearer browser-session", "X-CSRFToken": "legacy-csrf"},
+        )
+        self.assertEqual(response.status_code, 201)
+        outbound = transport.open.call_args.args[0]
+        self.assertEqual(outbound.get_header("Authorization"), "Bearer browser-session")
+        self.assertIsNone(outbound.get_header("Cookie"))
+        self.assertIsNone(outbound.get_header("X-csrftoken"))
+
+    @patch("bus_tracker_app.attendance.trip_context.build_opener")
     def test_http_context_allows_an_authorized_write(self, build_opener):
         self.client.cookies["trip_ops_sessionid"] = "test-session"
         self.client.cookies["trip_ops_csrftoken"] = "test-cookie"

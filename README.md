@@ -105,6 +105,20 @@ The SDLC was iterative and incremental: models, CRUD, tracking, and attendance w
 
 The developer led most design while Codex agents implemented much of it. This caused some unwanted Markdown files, tests, and changes to predetermined data, subsequently fixed by the developer, as seen in commits.
 
+## Assignment 2 static interface
+
+With the two local SQL databases and their Compose connection URLs configured, run
+`docker compose up --build` and open [SchoolRun on localhost](http://localhost:8080).
+Nginx serves the static files in `ui/`, and `ui/config.js` points the browser at Trip
+Operations on port 8002 and Attendance on port 8001. Sign in with an existing
+SchoolRun account from the Trip Operations database.
+
+The services accept browser API calls from the configured `UI_ORIGIN`. Compose
+sets it to `http://localhost:8080` by default. The browser keeps its session token in
+memory and sends it in the Authorization header. Attendance forwards it to Trip
+Operations to verify the caller and trip context. Refreshing the page requires
+signing in again.
+
 ## Assignment 2 backend deployment
 
 The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each app uses ingress port 8000, applies its committed migrations on startup, and reports its own database status and deployed SHA at `/health`.

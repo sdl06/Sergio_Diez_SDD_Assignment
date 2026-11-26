@@ -7,6 +7,7 @@ from .trips import views as trip_views
 app_name = "bus_tracker_app"
 
 urlpatterns = [
+    path("api/session/", auth.browser_login, name="browser_login"),
     path("api/", include("bus_tracker_app.tracking.urls")),
     path(
         "api/trips/<int:trip_id>/attendance-context/",

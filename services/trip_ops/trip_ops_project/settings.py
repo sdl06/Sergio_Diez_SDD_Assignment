@@ -36,6 +36,11 @@ ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get(
     'DJANGO_CSRF_TRUSTED_ORIGINS', ''
 ).split(',') if origin.strip()]
+UI_ORIGIN = os.environ.get("UI_ORIGIN", "").strip()
+CORS_ALLOWED_ORIGINS = [UI_ORIGIN] if UI_ORIGIN else []
+CORS_ALLOW_METHODS = ["GET", "POST", "OPTIONS"]
+CORS_ALLOW_HEADERS = ["authorization", "content-type"]
+CORS_EXPOSE_HEADERS = ["Retry-After"]
 if os.environ.get("CONTAINER_APP_NAME"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
@@ -45,6 +50,7 @@ if os.environ.get("CONTAINER_APP_NAME"):
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -52,10 +58,12 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'bus_tracker_app.auth.BearerSessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    'bus_tracker_app.auth.BearerAwareCsrfMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

@@ -12,8 +12,11 @@ def trip_data(trip):
     return {
         "id": trip.pk,
         "route_id": trip.route_id,
+        "route_name": trip.route.route_name,
         "bus_id": trip.bus_id,
+        "bus_plate": trip.bus.license_plate,
         "monitor_id": trip.monitor_id,
+        "monitor_name": trip.monitor.name,
         "date": trip.date,
         "leg": trip.leg,
         "status": trip.status,
@@ -26,6 +29,12 @@ def can_share_location(user, trip):
     return user.has_perm("bus_tracker_app.post_trip_location") and trip.monitor.user_id == user.pk
 
 
+def can_record_attendance(user, trip):
+    return user.has_perm("bus_tracker_app.record_trip_attendance") and (
+        user.is_superuser or trip.monitor.user_id == user.pk
+    )
+
+
 @never_cache
 @login_required
 @require_http_methods(["GET", "POST"])
@@ -33,9 +42,7 @@ def attendance_context(request, trip_id):
     """Return current attendance facts scoped to the authenticated caller."""
     trip = get_object_or_404(Trip.objects.select_related("monitor"), pk=trip_id)
     user = request.user
-    can_record = user.has_perm("bus_tracker_app.record_trip_attendance") and (
-        user.is_superuser or trip.monitor.user_id == user.pk
-    )
+    can_record = can_record_attendance(user, trip)
     can_view_all = user.has_perm("bus_tracker_app.manage_operational_data")
     students = trip.students.all()
     child_ids = list(ParentChildAccess.objects.filter(
@@ -80,6 +87,9 @@ def trip_detail(request, trip_id):
         **trip_data(trip),
         "students": list(students),
         "can_share": can_share_location(request.user, trip),
+        "can_record": can_record_attendance(request.user, trip),
+        "can_transition": request.user.has_perm("bus_tracker_app.prepare_trip")
+        or request.user.has_perm("bus_tracker_app.manage_operational_data"),
     })
 
 
