@@ -119,9 +119,11 @@ memory and sends it in the Authorization header. Attendance forwards it to Trip
 Operations to verify the caller and trip context. Refreshing the page requires
 signing in again.
 
-## Assignment 2 backend deployment
+## Assignment 2 Azure deployment
 
 The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each app uses ingress port 8000, applies its committed migrations on startup, and reports its own database status and deployed SHA at `/health`.
+
+The workflow reads the public website origin from the Azure Storage account and sets it as `UI_ORIGIN` on both services. After they pass their health checks, it generates a `config.js` with their HTTPS URLs and uploads `ui/` to the Storage account's `$web` container. The site is served at the Storage account's **Static website → Primary endpoint**.
 
 Configure these values under **Settings → Secrets and variables → Actions** in GitHub.
 
@@ -129,6 +131,7 @@ Configure these values under **Settings → Secrets and variables → Actions** 
 | --- | --- | --- |
 | Variable | `PREFIX` | `sdiez-ieu2024` |
 | Variable | `RESOURCE_GROUP` | `rg-sdiez-ieu2024` |
+| Variable | `UI_STORAGE` | `sdiezieu2024ui` |
 | Secret | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Client and tenant IDs for the Azure deployment identity and the Azure subscription ID |
 | Secret | `ATTENDANCE_DATABASE_URL`, `TRIP_OPS_DATABASE_URL` | Azure SQL connection URL for each service, using a dedicated database user with permissions to apply migrations and access app data |
 | Secret | `ATTENDANCE_DJANGO_SECRET_KEY`, `TRIP_OPS_DJANGO_SECRET_KEY` | Separate random, stable Django secret keys |
@@ -144,3 +147,5 @@ az account show --query '{AZURE_SUBSCRIPTION_ID:id}' --output json
 ```
 
 Both GHCR packages, `schoolrun-attendance` and `schoolrun-trip_ops`, must allow anonymous pulls for the existing Container Apps to fetch their images.
+
+Enable static website hosting on `sdiezieu2024ui` with `index.html` as the index document. Give the GitHub managed identity **Storage Blob Data Contributor** on that storage account so GitHub Actions can upload the files.

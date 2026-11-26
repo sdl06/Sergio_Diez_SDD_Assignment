@@ -132,10 +132,12 @@ jobs:
       group: schoolrun-azure
       cancel-in-progress: false
     permissions:
+      contents: read
       id-token: write
     env:
       PREFIX: ${{ vars.PREFIX }}
       RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+      UI_STORAGE: ${{ vars.UI_STORAGE }}
     steps:
       - name: Check deployment configuration and image availability
         env:
@@ -147,7 +149,7 @@ jobs:
           ATTENDANCE_DJANGO_SECRET_KEY: ${{ secrets.ATTENDANCE_DJANGO_SECRET_KEY }}
           TRIP_OPS_DJANGO_SECRET_KEY: ${{ secrets.TRIP_OPS_DJANGO_SECRET_KEY }}
         run: |
-          for name in PREFIX RESOURCE_GROUP AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+          for name in PREFIX RESOURCE_GROUP UI_STORAGE AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
               ATTENDANCE_DATABASE_URL TRIP_OPS_DATABASE_URL ATTENDANCE_DJANGO_SECRET_KEY TRIP_OPS_DJANGO_SECRET_KEY; do
             if [[ -z "${!name}" ]]; then
               echo "::error::Set ${name} in the repository's Actions settings."
@@ -194,6 +196,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Check out the frontend
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Deploy both Django services
         env:
           ATTENDANCE_DATABASE_URL: ${{ secrets.ATTENDANCE_DATABASE_URL }}
@@ -219,8 +226,17 @@ jobs:
               --min-replicas 0 --max-replicas 1 --output none \
               --set-env-vars \
                 "DATABASE_URL=secretref:database-url" "DJANGO_SECRET_KEY=secretref:django-secret-key" \
-                "DJANGO_ALLOWED_HOSTS=$host" "DJANGO_DEBUG=false" "APP_VERSION=$GITHUB_SHA" "$@"
+                "DJANGO_ALLOWED_HOSTS=$host" "DJANGO_DEBUG=false" "APP_VERSION=$GITHUB_SHA" \
+                "UI_ORIGIN=$ui_origin" "$@"
           }
+
+          ui_url=$(az storage account show --resource-group "$RESOURCE_GROUP" --name "$UI_STORAGE" \
+            --query 'primaryEndpoints.web' --output tsv)
+          ui_origin=${ui_url%/}
+          if [[ "$ui_origin" != https://?* ]]; then
+            echo "::error::Enable static website hosting on the UI storage account first."
+            exit 1
+          fi
 
           trip_ops_app="$PREFIX-trip-ops"
           attendance_app="$PREFIX-attendance"
@@ -252,3 +268,13 @@ jobs:
 
           wait_for_health "$trip_ops_host"
           wait_for_health "$attendance_host"
+
+          config=$(jq --null-input --compact-output \
+            --arg tripOpsUrl "https://$trip_ops_host" --arg attendanceUrl "https://$attendance_host" \
+            '{tripOpsUrl: $tripOpsUrl, attendanceUrl: $attendanceUrl}')
+          printf 'window.SCHOOLRUN_CONFIG = %s;\n' "$config" > ui/config.js
+
+      - name: Publish the static frontend
+        run: |
+          az storage blob upload-batch --account-name "$UI_STORAGE" --auth-mode login \
+            --source ui --destination '$web' --overwrite true --output none
