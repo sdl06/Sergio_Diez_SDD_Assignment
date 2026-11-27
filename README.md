@@ -121,7 +121,7 @@ signing in again.
 
 ## Assignment 2 Azure deployment
 
-The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each app uses ingress port 8000, applies its committed migrations on startup, and reports its own database status and deployed SHA at `/health`.
+The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each container applies its committed migrations on startup, then starts Gunicorn on port 8000 with one worker and two threads. Gunicorn writes the method, path, status and duration for each request to stdout. Each app reports its own database status and deployed SHA at `/health`.
 
 The workflow reads the public website origin from the Azure Storage account and sets it as `UI_ORIGIN` on both services. After they pass their health checks, it generates a `config.js` with their HTTPS URLs and uploads `ui/` to the Storage account's `$web` container. The site is served at the Storage account's **Static website → Primary endpoint**.
 
