@@ -135,8 +135,11 @@ class AttendanceTests(TestCase):
         self.assertFalse(StudentAttendance.objects.exists())
 
     def test_migration_creates_only_attendance_tables_without_foreign_keys(self):
-        tables = {name for name in connection.introspection.table_names() if name != "django_migrations"}
-        self.assertEqual(tables, {"bus_tracker_app_absencenotice", "bus_tracker_app_studentattendance"})
+        tables = {"bus_tracker_app_absencenotice", "bus_tracker_app_studentattendance"}
+        self.assertEqual(
+            set(connection.introspection.table_names()),
+            tables | {"django_migrations", "bus_tracker_app_databasehealthcheck"},
+        )
         with connection.cursor() as cursor:
             for table in tables:
                 constraints = connection.introspection.get_constraints(cursor, table)

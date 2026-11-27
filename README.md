@@ -119,6 +119,26 @@ memory and sends it in the Authorization header. Attendance forwards it to Trip
 Operations to verify the caller and trip context. Refreshing the page requires
 signing in again.
 
+## Assignment 2 CI checks
+
+On pushes and pull requests, CI lints both services with Ruff and runs each Django
+suite against its own disposable SQL Server container. Both suites must pass and
+reach at least 70% line coverage in their application packages. The tests include
+the Attendance-to-Trip Operations request with Trip Operations stubbed. Test
+containers use a private Docker network and generate their own SQL credentials.
+
+To reproduce the Attendance checks from the repository root:
+
+```bash
+python -m ruff check --isolated --select E4,E7,E9,F services/attendance
+docker build -t schoolrun-attendance services/attendance
+bash .github/test-with-sql-server.sh attendance
+```
+
+For Trip Operations, use `trip_ops` in place of `attendance`. The lint command
+uses Ruff 0.17.6. The SQL test command installs coverage.py inside a temporary
+image based on the service image.
+
 ## Assignment 2 Azure deployment
 
 The GitHub Actions workflow builds both Django services. A push to `main` publishes both images to GHCR with the commit SHA, then deploys that SHA to the existing Azure Container Apps. Each container applies its committed migrations on startup, then starts Gunicorn on port 8000 with one worker and two threads. Gunicorn writes the method, path, status and duration for each request to stdout. Each app reports its own database status and deployed SHA at `/health`.

@@ -1,4 +1,4 @@
-"""Concurrent tracking writes against a file-backed SQLite database."""
+"""Concurrent tracking writes against a shared test database."""
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 from unittest.mock import patch
@@ -41,7 +41,7 @@ class ConcurrentWritesTests(TransactionTestCase):
         with transaction.atomic():
             transition_trip(user=user, trip_id=self.trip.pk, target=target)
             locked.set()
-            if not release.wait(5):
+            if not release.wait(10):
                 raise RuntimeError("The test did not release the transition transaction")
 
     def test_simultaneous_gps_retry_creates_one_sample(self):
@@ -69,7 +69,15 @@ class ConcurrentWritesTests(TransactionTestCase):
         client = Client(raise_request_exception=False)
         client.force_login(self.monitor_user)
         locked, release, attempted = Event(), Event(), Event()
+        validated, continue_save = Event(), Event()
         original_update = QuerySet.update
+
+        def pause_after_validation(*args, **kwargs):
+            # Let the request actually read the active trip before SQL Server locks it.
+            validated.set()
+            if not continue_save.wait(10):
+                raise RuntimeError("The test did not release the GPS request")
+            return save_sample_once(*args, **kwargs)
 
         def observed_update(queryset, **kwargs):
             if queryset.model is Trip and "status" in kwargs and not isinstance(kwargs["status"], str):
@@ -78,14 +86,21 @@ class ConcurrentWritesTests(TransactionTestCase):
 
         payload = dict(latitude=40.4199, longitude=-3.6895, accuracy_m=5,
             observed_at=timezone.now().isoformat(), client_sample_id=str(uuid4()))
-        with ThreadPoolExecutor(max_workers=2) as pool, patch.object(QuerySet, "update", observed_update):
-            holder = pool.submit(self.worker, lambda: self.hold_transition("completed", locked, release))
+        with (
+            ThreadPoolExecutor(max_workers=2) as pool,
+            patch.object(QuerySet, "update", observed_update),
+            patch("bus_tracker_app.tracking.views.save_sample_once", side_effect=pause_after_validation),
+        ):
+            reader = pool.submit(self.worker, lambda: client.post(
+                f"/api/trips/{self.trip.pk}/locations/", payload, content_type="application/json"))
             try:
+                self.assertTrue(validated.wait(5))
+                holder = pool.submit(self.worker, lambda: self.hold_transition("completed", locked, release))
                 self.assertTrue(locked.wait(5))
-                reader = pool.submit(self.worker, lambda: client.post(
-                    f"/api/trips/{self.trip.pk}/locations/", payload, content_type="application/json"))
+                continue_save.set()
                 self.assertTrue(attempted.wait(5))
             finally:
+                continue_save.set()
                 release.set()
             holder.result(timeout=8)
             response = reader.result(timeout=8)
