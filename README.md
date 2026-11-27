@@ -127,6 +127,15 @@ reach at least 70% line coverage in their application packages. The tests includ
 the Attendance-to-Trip Operations request with Trip Operations stubbed. Test
 containers use a private Docker network and generate their own SQL credentials.
 
+CI also validates the root system description and both OpenAPI documents before
+building the images. To run the contract checks locally, use a Python virtual
+environment and run these commands from the repository root.
+
+```bash
+python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 openapi-spec-validator==0.9.0
+python .github/validate-system.py
+```
+
 To reproduce the Attendance checks from the repository root:
 
 ```bash
@@ -135,7 +144,7 @@ docker build -t schoolrun-attendance services/attendance
 bash .github/test-with-sql-server.sh attendance
 ```
 
-For Trip Operations, use `trip_ops` in place of `attendance`. The lint command
+For Trip Operations, use `trip-ops` in place of `attendance`. The lint command
 uses Ruff 0.17.6. The SQL test command installs coverage.py inside a temporary
 image based on the service image.
 

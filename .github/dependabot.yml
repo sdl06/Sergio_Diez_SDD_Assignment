@@ -4,6 +4,6 @@ updates:
     directories:
       - /
       - /services/attendance
-      - /services/trip_ops
+      - /services/trip-ops
     schedule:
       interval: weekly

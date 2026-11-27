@@ -1,0 +1,1135 @@
+openapi: 3.1.0
+info:
+  title: SchoolRun Trip Operations
+  version: 1.0.0
+  description: Browser sessions, trip preparation and execution, locations, arrival estimates and management.
+    Attendance uses the caller-scoped trip context endpoint.
+paths:
+  /health:
+    get:
+      summary: Check the service and its database.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+        '503':
+          description: The database check failed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+    head:
+      summary: Check health without receiving a response body.
+      security: []
+      responses:
+        '200':
+          description: Service and database are available.
+        '503':
+          description: The database check failed.
+  /api/session/:
+    post:
+      summary: Sign in from the configured UI origin and issue a bearer session.
+      security: []
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema: {type: string, format: uri}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string, minLength: 1}
+                password:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BrowserSession'}
+        '400': {$ref: '#/components/responses/InvalidPayload'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+  /accounts/login/:
+    get:
+      summary: Get a CSRF token and set the Trip Operations CSRF cookie.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [csrf_token]
+                properties:
+                  csrf_token: {type: string}
+    post:
+      summary: Sign in with a form and set the Trip Operations session cookie.
+      security: []
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: false
+        schema: {type: string}
+        description: Required unless the CSRF token is provided in the form.
+      - name: trip_ops_csrftoken
+        in: cookie
+        required: true
+        schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string, minLength: 1}
+                password:
+                  type: string
+                  minLength: 1
+                  writeOnly: true
+                csrfmiddlewaretoken:
+                  type: string
+                  description: CSRF token if the X-CSRFToken header is omitted.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, csrf_token]
+                properties:
+                  user_id: {type: integer, minimum: 1}
+                  csrf_token: {type: string}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /accounts/logout/:
+    post:
+      summary: End the current session.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logged_out]
+                properties:
+                  logged_out: {type: boolean}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/trips/{trip_id}/attendance-context/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the caller's authorized trip context for Attendance.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttendanceContext'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      summary: Read the same context for an Attendance write.
+      description: No request body. Attendance forwards the bearer token or the session and CSRF cookies with
+        the CSRF and origin headers.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttendanceContext'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /trips/:
+    get:
+      summary: List trips visible to the operational user.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trips]
+                properties:
+                  trips:
+                    type: array
+                    items: {$ref: '#/components/schemas/Trip'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+  /trips/{trip_id}/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read trip details, student roster and caller capabilities.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TripDetail'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /trips/{trip_id}/state/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read trip state and location-sharing permission.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, can_share]
+                properties:
+                  status:
+                    type: string
+                    enum: [prepared, active, completed]
+                  can_share: {type: boolean}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /trips/{trip_id}/start/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Start the trip.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trip, changed]
+                properties:
+                  trip: {$ref: '#/components/schemas/Trip'}
+                  changed: {type: boolean}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /trips/{trip_id}/complete/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Complete the trip.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trip, changed]
+                properties:
+                  trip: {$ref: '#/components/schemas/Trip'}
+                  changed: {type: boolean}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /admin/trips/new/:
+    get:
+      summary: List available routes and optionally fetch preparation options for one.
+      parameters:
+      - name: route
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [routes, selected_route]
+                properties:
+                  routes:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, route_name]
+                      properties:
+                        id: {type: integer, minimum: 1}
+                        route_name: {type: string}
+                  selected_route:
+                    anyOf:
+                    - {$ref: '#/components/schemas/PreparationOptions'}
+                    - {type: 'null'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /routes/{route_id}/prepare/:
+    parameters:
+    - name: route_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read a route's allowed trip preparation options.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PreparationOptions'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /routes/{route_id}/prepare/submit/:
+    parameters:
+    - name: route_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Prepare a trip or return the existing trip for the route, date and leg.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [bus, date, leg]
+              properties:
+                bus: {type: integer, minimum: 1}
+                monitor:
+                  type: integer
+                  minimum: 1
+                  description: Required for an administrator. An assigned monitor uses their own profile.
+                date: {type: string, format: date}
+                leg:
+                  type: integer
+                  enum: [1, 2]
+      responses:
+        '200':
+          description: The trip already exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trip, created]
+                properties:
+                  trip: {$ref: '#/components/schemas/Trip'}
+                  created: {type: boolean}
+        '201':
+          description: A trip was prepared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trip, created]
+                properties:
+                  trip: {$ref: '#/components/schemas/Trip'}
+                  created: {type: boolean}
+        '400':
+          description: Django form validation errors keyed by field name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FormErrors'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /parents/live/:
+    get:
+      summary: List accessible children and the selected child's trips.
+      parameters:
+      - name: child
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1}
+      - name: trip
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ParentLive'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/trips/{trip_id}/locations/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Accept a location sample from the assigned monitor while the trip is active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude, accuracy_m, observed_at, client_sample_id]
+              properties:
+                latitude: {type: number, minimum: -90, maximum: 90}
+                longitude: {type: number, minimum: -180, maximum: 180}
+                accuracy_m: {type: integer, minimum: 1, maximum: 1000}
+                observed_at: {type: string, format: date-time}
+                client_sample_id: {type: string, format: uuid}
+              additionalProperties: false
+      responses:
+        '200':
+          description: Already accepted this sample.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LocationReceipt'}
+        '201':
+          description: Stored a new sample.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LocationReceipt'}
+        '400': {$ref: '#/components/responses/InvalidPayload'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '429':
+          description: Location samples arrived too frequently.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+          headers:
+            Retry-After:
+              description: Seconds before retrying.
+              schema: {type: integer}
+  /api/children/{child_id}/trips/{trip_id}/location/:
+    parameters:
+    - name: child_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the latest bus location visible to the child's authorized user.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Location'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/children/{child_id}/trips/{trip_id}/eta/:
+    parameters:
+    - name: child_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the latest location and the arrival estimate for the child's stop.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Eta'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /manage/:
+    get:
+      summary: List available management resources and record counts.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resources]
+                properties:
+                  resources:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, label, count]
+                      properties:
+                        key:
+                          type: string
+                          enum: [parent-access, routes, stops, buses, monitors, students, trips]
+                        label: {type: string}
+                        count: {type: integer, minimum: 0}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /manage/{resource}/:
+    parameters:
+    - name: resource
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [parent-access, routes, stops, buses, monitors, students, trips]
+    get:
+      summary: List the records of the selected management resource.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [records]
+                properties:
+                  records:
+                    type: array
+                    items: {$ref: '#/components/schemas/Record'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /manage/{resource}/new/:
+    parameters:
+    - name: resource
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [parent-access, routes, stops, buses, monitors, students, trips]
+    get:
+      summary: Read field names, choices and defaults for the create form.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fields, form]
+                properties:
+                  fields:
+                    type: array
+                    items: {type: string}
+                  form:
+                    type: array
+                    items: {$ref: '#/components/schemas/FormField'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      summary: Create a management record.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: '#/components/schemas/ManagementForm'}
+      responses:
+        '201':
+          description: A record was created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Record'}
+        '400':
+          description: Django form validation errors keyed by field name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FormErrors'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /manage/{resource}/{pk}/edit/:
+    parameters:
+    - name: resource
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [parent-access, routes, stops, buses, monitors, students, trips]
+    - name: pk
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the record and pre-filled form fields.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - {$ref: '#/components/schemas/Record'}
+                - type: object
+                  required: [form]
+                  properties:
+                    form:
+                      type: array
+                      items: {$ref: '#/components/schemas/FormField'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      summary: Update a management record.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: {$ref: '#/components/schemas/ManagementForm'}
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Record'}
+        '400':
+          description: Django form validation errors keyed by field name.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FormErrors'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /manage/{resource}/{pk}/delete/:
+    parameters:
+    - name: resource
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [parent-access, routes, stops, buses, monitors, students, trips]
+    - name: pk
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Delete a management record that is not in use.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: {type: boolean}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+security:
+- bearerAuth: []
+- sessionCookie: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque session token issued by Trip Operations.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: trip_ops_sessionid
+      description: Trip Operations session cookie. Cookie-authenticated POSTs require the CSRF cookie, X-CSRFToken
+        header and a valid origin or referer.
+  schemas:
+    Health:
+      type: object
+      required: [status, db, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        db:
+          type: string
+          enum: [ok, unavailable]
+        version: {type: string}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+        detail: {type: string}
+    BrowserSession:
+      type: object
+      required: [token, can_prepare, can_manage, can_operate]
+      properties:
+        token:
+          type: string
+          pattern: ^[a-z0-9]{32}$
+        can_prepare: {type: boolean}
+        can_manage: {type: boolean}
+        can_operate: {type: boolean}
+    Trip:
+      type: object
+      required: [id, route_id, route_name, bus_id, bus_plate, monitor_id, monitor_name, date, leg, status,
+        started_at, completed_at]
+      properties:
+        id: {type: integer, minimum: 1}
+        route_id: {type: integer, minimum: 1}
+        route_name: {type: string}
+        bus_id: {type: integer, minimum: 1}
+        bus_plate: {type: string}
+        monitor_id: {type: integer, minimum: 1}
+        monitor_name: {type: string}
+        date: {type: string, format: date}
+        leg:
+          type: integer
+          enum: [1, 2]
+        status:
+          type: string
+          enum: [prepared, active, completed]
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+    TripDetail:
+      type: object
+      required: [id, route_id, route_name, bus_id, bus_plate, monitor_id, monitor_name, date, leg, status,
+        started_at, completed_at, students, can_share, can_record, can_transition]
+      properties:
+        id: {type: integer, minimum: 1}
+        route_id: {type: integer, minimum: 1}
+        route_name: {type: string}
+        bus_id: {type: integer, minimum: 1}
+        bus_plate: {type: string}
+        monitor_id: {type: integer, minimum: 1}
+        monitor_name: {type: string}
+        date: {type: string, format: date}
+        leg:
+          type: integer
+          enum: [1, 2]
+        status:
+          type: string
+          enum: [prepared, active, completed]
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+        students:
+          type: array
+          items:
+            type: object
+            required: [id, name, assigned_stop_id]
+            properties:
+              id: {type: integer, minimum: 1}
+              name: {type: string}
+              assigned_stop_id: {type: integer, minimum: 1}
+        can_share: {type: boolean}
+        can_record: {type: boolean}
+        can_transition: {type: boolean}
+    AttendanceContext:
+      type: object
+      required: [trip_id, status, leg, actor_id, parent_child_ids, can_view_all_children, can_record_attendance,
+        roster]
+      properties:
+        trip_id: {type: integer, minimum: 1}
+        status:
+          type: string
+          enum: [prepared, active, completed]
+        leg:
+          type: integer
+          enum: [1, 2]
+        actor_id: {type: integer, minimum: 1}
+        parent_child_ids:
+          type: array
+          items: {type: integer, minimum: 1}
+        can_view_all_children: {type: boolean}
+        can_record_attendance: {type: boolean}
+        roster:
+          type: array
+          items:
+            type: object
+            required: [student_id, name, stop_id, stop_name]
+            properties:
+              student_id: {type: integer, minimum: 1}
+              name: {type: string}
+              stop_id: {type: integer, minimum: 1}
+              stop_name: {type: string}
+    PreparationOptions:
+      type: object
+      required: [route_id, monitors, buses, students, legs]
+      properties:
+        route_id: {type: integer, minimum: 1}
+        monitors:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer, minimum: 1}
+              name: {type: string}
+        buses:
+          type: array
+          items:
+            type: object
+            required: [id, license_plate]
+            properties:
+              id: {type: integer, minimum: 1}
+              license_plate: {type: string}
+        students:
+          type: array
+          items:
+            type: object
+            required: [id, name, assigned_stop_id]
+            properties:
+              id: {type: integer, minimum: 1}
+              name: {type: string}
+              assigned_stop_id: {type: integer, minimum: 1}
+        legs:
+          type: array
+          items:
+            type: integer
+            enum: [1, 2]
+    ParentLive:
+      type: object
+      required: [children, child, trips, trip, can_report_absence]
+      properties:
+        children:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer, minimum: 1}
+              name: {type: string}
+        child:
+          type: [object, 'null']
+          required: [id, name, stop]
+          properties:
+            id: {type: integer, minimum: 1}
+            name: {type: string}
+            stop:
+              type: object
+              required: [id, name, latitude, longitude]
+              properties:
+                id: {type: integer, minimum: 1}
+                name: {type: string}
+                latitude: {type: number, minimum: -90, maximum: 90}
+                longitude: {type: number, minimum: -180, maximum: 180}
+        trips:
+          type: array
+          items: {$ref: '#/components/schemas/Trip'}
+        trip:
+          anyOf:
+          - {$ref: '#/components/schemas/Trip'}
+          - {type: 'null'}
+        can_report_absence: {type: boolean}
+    Location:
+      type: object
+      required: [trip_id, state]
+      properties:
+        trip_id: {type: integer, minimum: 1}
+        state:
+          type: string
+          enum: [completed, no_fix, stale, fresh]
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        accuracy_m: {type: integer, minimum: 1, maximum: 1000}
+        observed_at: {type: string, format: date-time}
+        received_at: {type: string, format: date-time}
+    Eta:
+      allOf:
+      - {$ref: '#/components/schemas/Location'}
+      - type: object
+        required: [student_id, stop_id, stop_name, eta_state, estimate_refreshed, estimated_arrival, scheduled_arrival,
+          delay_seconds, eta_calculated_at, travel_time_seconds, traffic_delay_seconds]
+        properties:
+          student_id: {type: integer, minimum: 1}
+          stop_id: {type: integer, minimum: 1}
+          stop_name: {type: string}
+          eta_state:
+            type: string
+            enum: [prepared, completed, no_location, stale_location, cached, stale_eta, eta_unavailable, fresh_eta]
+          estimate_refreshed: {type: boolean}
+          estimated_arrival:
+            type: [string, 'null']
+            format: date-time
+          scheduled_arrival:
+            type: [string, 'null']
+            format: date-time
+          delay_seconds:
+            type: [integer, 'null']
+          eta_calculated_at:
+            type: [string, 'null']
+            format: date-time
+          travel_time_seconds:
+            type: [integer, 'null']
+          traffic_delay_seconds:
+            type: [integer, 'null']
+    LocationReceipt:
+      type: object
+      required: [accepted, sample_id, duplicate]
+      properties:
+        accepted: {const: true}
+        sample_id: {type: integer, minimum: 1}
+        duplicate: {type: boolean}
+    FormErrors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              required: [message, code]
+              properties:
+                message: {type: string}
+                code: {type: string}
+    FormField:
+      type: object
+      required: [name, label, required, type, value]
+      properties:
+        name: {type: string}
+        label:
+          type: [string, 'null']
+        required: {type: boolean}
+        type:
+          type: string
+          enum: [date, time, number, text]
+        value:
+          type: ['null', string, number, boolean, array]
+          items:
+            type: [string, number]
+        choices:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value: {type: string}
+              label: {type: string}
+        multiple: {type: boolean}
+    Record:
+      oneOf:
+      - {$ref: '#/components/schemas/ParentAccessRecord'}
+      - {$ref: '#/components/schemas/RouteRecord'}
+      - {$ref: '#/components/schemas/StopRecord'}
+      - {$ref: '#/components/schemas/BusRecord'}
+      - {$ref: '#/components/schemas/MonitorRecord'}
+      - {$ref: '#/components/schemas/StudentRecord'}
+      - {$ref: '#/components/schemas/ManagedTripRecord'}
+    ManagementForm:
+      description: Use the form schema for the selected resource. Send multiple students as repeated form fields.
+      oneOf:
+      - {$ref: '#/components/schemas/ParentAccessForm'}
+      - {$ref: '#/components/schemas/RouteForm'}
+      - {$ref: '#/components/schemas/StopForm'}
+      - {$ref: '#/components/schemas/BusForm'}
+      - {$ref: '#/components/schemas/MonitorForm'}
+      - {$ref: '#/components/schemas/StudentForm'}
+      - {$ref: '#/components/schemas/ManagedTripForm'}
+    ParentAccessRecord:
+      type: object
+      required: [id, user, student]
+      properties:
+        id: {type: integer, minimum: 1}
+        user: {type: integer, minimum: 1}
+        student: {type: integer, minimum: 1}
+    ParentAccessForm:
+      type: object
+      required: [user, student]
+      properties:
+        user: {type: integer, minimum: 1}
+        student: {type: integer, minimum: 1}
+      additionalProperties: false
+    RouteRecord:
+      type: object
+      required: [id, route_name]
+      properties:
+        id: {type: integer, minimum: 1}
+        route_name: {type: string}
+    RouteForm:
+      type: object
+      required: [route_name]
+      properties:
+        route_name: {type: string}
+      additionalProperties: false
+    StopRecord:
+      type: object
+      required: [id, descriptor, assigned_route, longitude, latitude, configured_leg1_arrival, configured_leg2_arrival]
+      properties:
+        id: {type: integer, minimum: 1}
+        descriptor: {type: string}
+        assigned_route: {type: integer, minimum: 1}
+        longitude: {type: number}
+        latitude: {type: number}
+        configured_leg1_arrival:
+          type: string
+          description: Local time in HH:MM:SS format.
+        configured_leg2_arrival:
+          type: string
+          description: Local time in HH:MM:SS format.
+    StopForm:
+      type: object
+      required: [descriptor, assigned_route, longitude, latitude, configured_leg1_arrival, configured_leg2_arrival]
+      properties:
+        descriptor: {type: string}
+        assigned_route: {type: integer, minimum: 1}
+        longitude: {type: number}
+        latitude: {type: number}
+        configured_leg1_arrival:
+          type: string
+          description: Local time in HH:MM or HH:MM:SS format.
+        configured_leg2_arrival:
+          type: string
+          description: Local time in HH:MM or HH:MM:SS format.
+      additionalProperties: false
+    BusRecord:
+      type: object
+      required: [id, license_plate, capacity, bus_model, bus_contractor, current_longitude]
+      properties:
+        id: {type: integer, minimum: 1}
+        license_plate: {type: string}
+        capacity: {type: integer, minimum: 0}
+        bus_model: {type: string}
+        bus_contractor: {type: string}
+        current_longitude: {type: number}
+    BusForm:
+      type: object
+      required: [license_plate, capacity, bus_model, bus_contractor, current_longitude]
+      properties:
+        license_plate: {type: string}
+        capacity: {type: integer, minimum: 0}
+        bus_model: {type: string}
+        bus_contractor: {type: string}
+        current_longitude: {type: number}
+      additionalProperties: false
+    MonitorRecord:
+      type: object
+      required: [id, name, route, user]
+      properties:
+        id: {type: integer, minimum: 1}
+        name: {type: string}
+        route: {type: integer, minimum: 1}
+        user:
+          type: [integer, 'null']
+          minimum: 1
+    MonitorForm:
+      type: object
+      required: [name, route]
+      properties:
+        name: {type: string}
+        route: {type: integer, minimum: 1}
+        user: {type: integer, minimum: 1}
+      additionalProperties: false
+    StudentRecord:
+      type: object
+      required: [id, name, date_of_birth, route, assigned_stop]
+      properties:
+        id: {type: integer, minimum: 1}
+        name: {type: string}
+        date_of_birth: {type: string, format: date}
+        route: {type: integer, minimum: 1}
+        assigned_stop: {type: integer, minimum: 1}
+    StudentForm:
+      type: object
+      required: [name, date_of_birth, route, assigned_stop]
+      properties:
+        name: {type: string}
+        date_of_birth: {type: string, format: date}
+        route: {type: integer, minimum: 1}
+        assigned_stop: {type: integer, minimum: 1}
+      additionalProperties: false
+    ManagedTripRecord:
+      type: object
+      required: [id, route, bus, monitor, date, leg, students]
+      properties:
+        id: {type: integer, minimum: 1}
+        route: {type: integer, minimum: 1}
+        bus: {type: integer, minimum: 1}
+        monitor: {type: integer, minimum: 1}
+        date: {type: string, format: date}
+        leg:
+          type: integer
+          enum: [1, 2]
+        students:
+          type: array
+          items: {type: integer, minimum: 1}
+    ManagedTripForm:
+      type: object
+      required: [route, bus, monitor, date, leg]
+      properties:
+        route: {type: integer, minimum: 1}
+        bus: {type: integer, minimum: 1}
+        monitor: {type: integer, minimum: 1}
+        date: {type: string, format: date}
+        leg:
+          type: integer
+          enum: [1, 2]
+        students:
+          type: array
+          items: {type: integer, minimum: 1}
+      additionalProperties: false
+  responses:
+    InvalidPayload:
+      description: Invalid request payload.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    AuthenticationRequired:
+      description: Authentication required or credentials invalid.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: Permission denied or CSRF validation failed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UnsupportedMediaType:
+      description: Expected application/json.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Resource absent or hidden from this caller.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict:
+      description: The current resource state does not permit the operation.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}

@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=./system.schema.json
+student: sdiez.ieu2024
+prefix: sdiez-ieu2024
+public_url: https://sdiezieu2024ui.z28.web.core.windows.net/
+ui:
+  path: ui
+  storage_account: sdiezieu2024ui
+  calls: [attendance, trip-ops]
+azure:
+  resource_group: rg-sdiez-ieu2024
+  container_apps_environment: sdiez-ieu2024-env
+  sql_server: sdiez-ieu2024-sql
+  registry: ghcr.io/sdl06
+services:
+  attendance:
+    description: Parent absence notices and monitor attendance observations.
+    path: services/attendance
+    openapi: services/attendance/openapi.yaml
+    port_default: 8000
+    health: /health
+    migrations: services/attendance/bus_tracker_app/migrations
+    env:
+      PORT: {default: 8000, description: Gunicorn HTTP port.}
+      DATABASE_URL: {secret: true, description: Connection URL for the Attendance SQL database.}
+      SQL_EXTRA_PARAMS:
+        default: Encrypt=yes;TrustServerCertificate=no
+        description: ODBC connection options.
+      DJANGO_SETTINGS_MODULE: {default: attendance_project.settings, description: Django settings module.}
+      DJANGO_SECRET_KEY: {secret: true, description: Django signing key.}
+      DJANGO_DEBUG: {default: true, description: Django debug flag. Azure sets it to false.}
+      DJANGO_ALLOWED_HOSTS:
+        default: 'localhost,127.0.0.1,[::1]'
+        description: Comma-separated hostnames Django accepts.
+      UI_ORIGIN:
+        default: https://sdiezieu2024ui.z28.web.core.windows.net
+        description: Browser origin allowed to call the API. Compose sets the local UI origin.
+      APP_VERSION: {default: local, description: Commit SHA reported in the health response.}
+      TRIP_OPS_BASE_URL:
+        default: http://127.0.0.1:8002
+        description: Base URL of Trip Operations. Compose uses its service hostname and Azure uses HTTPS.
+      TRIP_OPS_TIMEOUT_SECONDS: {default: 3, description: Timeout for the Trip Operations HTTP request.}
+    calls:
+      - service: trip-ops
+        url_env: TRIP_OPS_BASE_URL
+        endpoints:
+          - GET /api/trips/{trip_id}/attendance-context/
+          - POST /api/trips/{trip_id}/attendance-context/
+        timeout_s: 3
+        on_failure: Attendance passes through HTTP 401, 403 and 404. On a timeout, invalid response or other upstream error, it returns HTTP 503 with trip_context_unavailable.
+    azure:
+      container_app: sdiez-ieu2024-attendance
+      sql_database: sdiez-ieu2024-attendance-db
+  trip-ops:
+    description: Accounts, routes, buses, trips, student rosters, locations and arrival estimates.
+    path: services/trip-ops
+    openapi: services/trip-ops/openapi.yaml
+    port_default: 8000
+    health: /health
+    migrations: services/trip-ops/bus_tracker_app/migrations
+    env:
+      PORT: {default: 8000, description: Gunicorn HTTP port.}
+      DATABASE_URL: {secret: true, description: Connection URL for the Trip Operations SQL database.}
+      SQL_EXTRA_PARAMS:
+        default: Encrypt=yes;TrustServerCertificate=no
+        description: ODBC connection options.
+      DJANGO_SETTINGS_MODULE: {default: trip_ops_project.settings, description: Django settings module.}
+      DJANGO_SECRET_KEY: {secret: true, description: Django signing key.}
+      DJANGO_DEBUG: {default: true, description: Django debug flag. Azure sets it to false.}
+      DJANGO_ALLOWED_HOSTS:
+        default: 'localhost,127.0.0.1,[::1],0.0.0.0'
+        description: Comma-separated hostnames Django accepts.
+      DJANGO_CSRF_TRUSTED_ORIGINS: {default: '', description: Comma-separated trusted origins for cookie-authenticated writes.}
+      UI_ORIGIN:
+        default: https://sdiezieu2024ui.z28.web.core.windows.net
+        description: Browser origin allowed for CORS and browser sign-in. Compose sets the local UI origin.
+      CONTAINER_APP_NAME: {default: '', description: Azure-injected name that enables HTTPS proxy and secure cookie settings.}
+      APP_VERSION: {default: local, description: Commit SHA reported in the health response.}
+      TRIP_OPS_DATA_DIR: {default: /app, description: Local management data directory. Outside Docker it defaults to the project directory.}
+      TOMTOM_API_KEY: {secret: true, description: Optional key used for traffic-aware arrival estimates.}
+      TOMTOM_ROUTING_URL:
+        default: https://api.tomtom.com/maps/orbis/routing/routes/calculate?apiVersion=3
+        description: TomTom routing API endpoint.
+      TOMTOM_TIMEOUT_SECONDS: {default: 5, description: Timeout for the TomTom request.}
+      ETA_MIN_REFRESH_SECONDS: {default: 30, description: Minimum age before a cached estimate can refresh.}
+      ETA_MAX_REFRESH_SECONDS: {default: 60, description: Maximum age before recomputing a cached estimate.}
+      ETA_MIN_MOVEMENT_METRES: {default: 150, description: Bus movement used to decide when to refresh an estimate.}
+      SCHOOL_TIME_ZONE: {default: Europe/Madrid, description: Time zone used for route schedules.}
+    calls: []
+    azure:
+      container_app: sdiez-ieu2024-trip-ops
+      sql_database: sdiez-ieu2024-trip-ops-db

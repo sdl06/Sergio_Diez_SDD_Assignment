@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-service=${1:?Pass attendance or trip_ops}
+service=${1:?Pass attendance or trip-ops}
 case "$service" in
-  attendance|trip_ops) ;;
+  attendance|trip-ops) ;;
   *) echo "Unknown SchoolRun service: $service" >&2; exit 1 ;;
 esac
 image=${2:-schoolrun-$service}

@@ -34,7 +34,7 @@ class StudentAttendance(models.Model):
     status = models.CharField(max_length=8, choices=Status.choices)
     # Historical Boolean records have no known recorder or observation timestamp.
     recorded_by_id = models.PositiveBigIntegerField(null=True)
-    recorded_at = models.DateTimeField(auto_now=True, null=True)
+    recorded_at = models.DateTimeField(auto_now=True, null=True, db_column="last_recorded_at")
 
     class Meta:
         constraints = [

@@ -19,7 +19,7 @@ Trip Operations serves backend routes at `http://127.0.0.1:8002`. The separate f
 - `GET /parents/live/` returns the caller's children and trips. Monitor GPS submissions and parent location and ETA reads are under `/api/`.
 - Attendance calls `/api/trips/<trip_id>/attendance-context/` with the caller's Trip Operations session. It uses GET for reads and POST with CSRF for write checks. Run migrations and grant each attending monitor the **Can record attendance for an assigned trip** permission. The endpoint checks the assigned monitor and limits a parent's result to their linked children.
 
-The initial migration starts an empty SQLite database at `services/trip_ops/db.sqlite3`. To use another directory, set `TRIP_OPS_DATA_DIR` to a directory reserved for this project. Assignment 1 records have not been imported.
+Set `DATABASE_URL` to a SQL Server connection URL before running the standalone commands. The initial migration creates the tables in that database.
 
 Optional settings are listed in `.env.example`. Supply your own `TOMTOM_API_KEY` to enable traffic estimates. Set a private `DJANGO_SECRET_KEY` locally if sessions should survive a server restart. Attendance and absence notices belong to the separate Attendance project.
 

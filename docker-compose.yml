@@ -12,8 +12,8 @@ services:
       TRIP_OPS_BASE_URL: http://trip-ops:8000
       DATABASE_URL: "${ATTENDANCE_DATABASE_URL:?Set ATTENDANCE_DATABASE_URL}"
       SQL_EXTRA_PARAMS: "Encrypt=yes;TrustServerCertificate=yes"
-  trip_ops:
-    build: ./services/trip_ops
+  trip-ops:
+    build: ./services/trip-ops
     ports: ["8002:8000"]
     environment:
       UI_ORIGIN: "${SCHOOLRUN_UI_ORIGIN:-http://localhost:8080}"
@@ -21,9 +21,6 @@ services:
       DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8001,http://127.0.0.1:8001
       DATABASE_URL: "${TRIP_OPS_DATABASE_URL:?Set TRIP_OPS_DATABASE_URL}"
       SQL_EXTRA_PARAMS: "Encrypt=yes;TrustServerCertificate=yes"
-    networks:
-      default:
-        aliases: [trip-ops]
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64

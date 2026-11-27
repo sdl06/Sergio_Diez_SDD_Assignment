@@ -1,0 +1,281 @@
+openapi: 3.1.0
+info:
+  title: SchoolRun Attendance
+  version: 1.0.0
+  description: Parent absence notices and definitive attendance observations. Trip Operations verifies the
+    caller and supplies trip and roster data.
+paths:
+  /health:
+    get:
+      summary: Check the service and its database.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+        '503':
+          description: The database check failed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+    head:
+      summary: Check health without receiving a response body.
+      security: []
+      responses:
+        '200':
+          description: Service and database are available.
+        '503':
+          description: The database check failed.
+  /api/children/{child_id}/trips/{trip_id}/absence/:
+    parameters:
+    - name: child_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the child's absence notice and attendance state.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AbsenceState'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/UpstreamUnavailable'}
+    post:
+      summary: Report or cancel an absence for a prepared trip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [absent]
+              properties:
+                absent: {type: boolean}
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AbsenceState'}
+        '201':
+          description: An absence notice was created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AbsenceState'}
+        '400': {$ref: '#/components/responses/InvalidPayload'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/UpstreamUnavailable'}
+  /api/trips/{trip_id}/attendance/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    get:
+      summary: Read the roster and attendance for a trip.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttendanceRoster'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/UpstreamUnavailable'}
+  /api/trips/{trip_id}/attendance/{student_id}/:
+    parameters:
+    - name: trip_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    - name: student_id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+    post:
+      summary: Record or update a student's attendance on an active trip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [present, absent]
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Observation'}
+        '201':
+          description: An attendance record was created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Observation'}
+        '400': {$ref: '#/components/responses/InvalidPayload'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/UpstreamUnavailable'}
+security:
+- bearerAuth: []
+- sessionCookie: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque session token issued by Trip Operations.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: trip_ops_sessionid
+      description: Trip Operations session cookie. Cookie-authenticated POSTs require the CSRF cookie, X-CSRFToken
+        header and a valid origin or referer.
+  schemas:
+    Health:
+      type: object
+      required: [status, db, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        db:
+          type: string
+          enum: [ok, unavailable]
+        version: {type: string}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+        detail: {type: string}
+    AbsenceState:
+      type: object
+      required: [student_id, trip_id, leg, status, absent, reported_at, updated_at, attendance, recorded_at]
+      properties:
+        student_id: {type: integer, minimum: 1}
+        trip_id: {type: integer, minimum: 1}
+        leg:
+          type: integer
+          enum: [1, 2]
+        status:
+          type: string
+          enum: [not_reported, reported, cancelled]
+        absent: {type: boolean}
+        reported_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+        attendance:
+          type: string
+          enum: [present, absent, unrecorded]
+        recorded_at:
+          type: [string, 'null']
+          format: date-time
+    RosterStudent:
+      type: object
+      required: [student_id, name, stop_id, stop_name, absence_notice, attendance, recorded_at]
+      properties:
+        student_id: {type: integer, minimum: 1}
+        name: {type: string}
+        stop_id: {type: integer, minimum: 1}
+        stop_name: {type: string}
+        absence_notice:
+          type: [string, 'null']
+          enum: [reported, cancelled, null]
+        attendance:
+          type: string
+          enum: [present, absent, unrecorded]
+        recorded_at:
+          type: [string, 'null']
+          format: date-time
+    AttendanceRoster:
+      type: object
+      required: [trip_id, leg, status, students]
+      properties:
+        trip_id: {type: integer, minimum: 1}
+        leg:
+          type: integer
+          enum: [1, 2]
+        status:
+          type: string
+          enum: [prepared, active, completed]
+        students:
+          type: array
+          items: {$ref: '#/components/schemas/RosterStudent'}
+    Observation:
+      type: object
+      required: [trip_id, student_id, status, recorded_at]
+      properties:
+        trip_id: {type: integer, minimum: 1}
+        student_id: {type: integer, minimum: 1}
+        status:
+          type: string
+          enum: [present, absent]
+        recorded_at: {type: string, format: date-time}
+  responses:
+    AuthenticationRequired:
+      description: Authentication required or credentials invalid.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: Permission denied or CSRF validation failed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: Resource absent or hidden from this caller.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UpstreamUnavailable:
+      description: Trip Operations is unavailable or local SQLite is busy.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+      headers:
+        Retry-After:
+          description: Seconds before retrying when the local database is busy.
+          schema: {type: integer}
+    InvalidPayload:
+      description: Invalid request payload.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict:
+      description: The current resource state does not permit the operation.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UnsupportedMediaType:
+      description: Expected application/json.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}

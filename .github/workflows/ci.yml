@@ -3,6 +3,21 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  contracts:
+    name: Validate system and OpenAPI contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install contract validators
+        run: python -m pip install PyYAML==6.0.3 jsonschema==4.26.0 openapi-spec-validator==0.9.0
+      - name: Validate the system description and service APIs
+        run: python .github/validate-system.py
+
   sast:
     name: Semgrep SAST
     runs-on: ubuntu-latest
@@ -27,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [attendance, trip_ops]
+        service: [attendance, trip-ops]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -50,13 +65,13 @@ jobs:
 
   build:
     name: Build ${{ matrix.service }}
-    needs: sca
+    needs: [sca, contracts]
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        service: [attendance, trip_ops]
+        service: [attendance, trip-ops]
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6
@@ -108,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [attendance, trip_ops]
+        service: [attendance, trip-ops]
 
     steps:
       - name: Download the built image
@@ -125,11 +140,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish the built image
+        shell: bash
         env:
           SERVICE: ${{ matrix.service }}
         run: |
           docker load --input "$RUNNER_TEMP/schoolrun-image.tar.gz"
-          image="ghcr.io/sdl06/schoolrun-$SERVICE:$GITHUB_SHA"
+          image="ghcr.io/sdl06/schoolrun-${SERVICE//-/_}:$GITHUB_SHA"
           docker tag "schoolrun-$SERVICE" "$image"
           docker push "$image"
 
