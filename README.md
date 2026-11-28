@@ -107,6 +107,8 @@ The developer led most design while Codex agents implemented much of it. This ca
 
 ## Assignment 2 static interface
 
+Open the [live SchoolRun application on Azure](https://sdiezieu2024ui.z28.web.core.windows.net/).
+
 For a fresh local volume, generate three separate passwords in a Compose environment
 file from the repository root. If you already have a local SQL Server volume,
 put its existing SA and service login passwords in this file.
