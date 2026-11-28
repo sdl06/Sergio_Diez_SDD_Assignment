@@ -185,6 +185,7 @@ Configure these values under **Settings → Secrets and variables → Actions** 
 | Secret | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Client and tenant IDs for the Azure deployment identity and the Azure subscription ID |
 | Secret | `ATTENDANCE_DATABASE_URL`, `TRIP_OPS_DATABASE_URL` | Azure SQL connection URL for each service, using a dedicated database user with permissions to apply migrations and access app data |
 | Secret | `ATTENDANCE_DJANGO_SECRET_KEY`, `TRIP_OPS_DJANGO_SECRET_KEY` | Separate random, stable Django secret keys |
+| Optional secret | `TOMTOM_API_KEY` | Enables traffic-aware ETAs. The workflow stores it as `tomtom-api-key` in Trip Operations and binds it as a runtime secret reference. When the GitHub secret is empty, the workflow can use an existing Azure secret with that name. |
 
 Use `mssql://<user>:<password>@sdiez-ieu2024-sql.database.windows.net:1433/<database>` for the database URLs. Percent-encode special characters in the username and password. The database names are `sdiez-ieu2024-attendance-db` and `sdiez-ieu2024-trip-ops-db`.
 

@@ -235,6 +235,7 @@ jobs:
           TRIP_OPS_DATABASE_URL: ${{ secrets.TRIP_OPS_DATABASE_URL }}
           ATTENDANCE_DJANGO_SECRET_KEY: ${{ secrets.ATTENDANCE_DJANGO_SECRET_KEY }}
           TRIP_OPS_DJANGO_SECRET_KEY: ${{ secrets.TRIP_OPS_DJANGO_SECRET_KEY }}
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
           AZURE_CORE_OUTPUT: none
         run: |
           app_host() {
@@ -275,8 +276,20 @@ jobs:
             exit 1
           fi
 
+          trip_ops_env=("DJANGO_CSRF_TRUSTED_ORIGINS=https://$attendance_host")
+          if [[ -n "$TOMTOM_API_KEY" ]]; then
+            az containerapp secret set --resource-group "$RESOURCE_GROUP" --name "$trip_ops_app" \
+              --secrets "tomtom-api-key=$TOMTOM_API_KEY" --output none
+            trip_ops_env+=("TOMTOM_API_KEY=secretref:tomtom-api-key")
+          else
+            tomtom_secret=$(az containerapp secret list --resource-group "$RESOURCE_GROUP" --name "$trip_ops_app" \
+              --query "[?name=='tomtom-api-key'].name | [0]" --output tsv)
+            if [[ "$tomtom_secret" == tomtom-api-key ]]; then
+              trip_ops_env+=("TOMTOM_API_KEY=secretref:tomtom-api-key")
+            fi
+          fi
           deploy "$trip_ops_app" trip_ops "$trip_ops_host" "$TRIP_OPS_DATABASE_URL" "$TRIP_OPS_DJANGO_SECRET_KEY" \
-            "DJANGO_CSRF_TRUSTED_ORIGINS=https://$attendance_host"
+            "${trip_ops_env[@]}"
           deploy "$attendance_app" attendance "$attendance_host" "$ATTENDANCE_DATABASE_URL" "$ATTENDANCE_DJANGO_SECRET_KEY" \
             "TRIP_OPS_BASE_URL=https://$trip_ops_host"
 
