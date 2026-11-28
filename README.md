@@ -107,8 +107,29 @@ The developer led most design while Codex agents implemented much of it. This ca
 
 ## Assignment 2 static interface
 
-With the two local SQL databases and their Compose connection URLs configured, run
-`docker compose up --build` and open [SchoolRun on localhost](http://localhost:8080).
+For a fresh local volume, generate three separate passwords in a Compose environment
+file from the repository root. If you already have a local SQL Server volume,
+put its existing SA and service login passwords in this file.
+
+```bash
+(
+  umask 077
+  set -C
+  sa_password=$(openssl rand -hex 24) &&
+    attendance_password=$(openssl rand -hex 24) &&
+    trip_ops_password=$(openssl rand -hex 24) &&
+    printf 'MSSQL_SA_PASSWORD=Local1-%s\nATTENDANCE_SQL_PASSWORD=Local1-%s\nTRIP_OPS_SQL_PASSWORD=Local1-%s\n' \
+      "$sa_password" "$attendance_password" "$trip_ops_password" > .env.compose
+)
+docker compose --env-file .env.compose up --build
+```
+
+The one-off `sql-init` service waits for SQL Server, then creates any missing local
+databases, logins and database users. Each Django service runs its migrations
+after initialization. The initializer preserves existing databases and passwords.
+Service passwords use letters, digits, underscores or hyphens.
+
+Open [SchoolRun on localhost](http://localhost:8080).
 Nginx serves the static files in `ui/`, and `ui/config.js` points the browser at Trip
 Operations on port 8002 and Attendance on port 8001. Sign in with an existing
 SchoolRun account from the Trip Operations database.

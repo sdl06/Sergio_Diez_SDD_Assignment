@@ -7,19 +7,26 @@ services:
   attendance:
     build: ./services/attendance
     ports: ["8001:8000"]
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
     environment:
       UI_ORIGIN: "${SCHOOLRUN_UI_ORIGIN:-http://localhost:8080}"
       TRIP_OPS_BASE_URL: http://trip-ops:8000
-      DATABASE_URL: "${ATTENDANCE_DATABASE_URL:?Set ATTENDANCE_DATABASE_URL}"
+      DATABASE_URL: "mssql://attendance_app:${ATTENDANCE_SQL_PASSWORD:?Set ATTENDANCE_SQL_PASSWORD}@sql:1433/schoolrun_attendance"
       SQL_EXTRA_PARAMS: "Encrypt=yes;TrustServerCertificate=yes"
   trip-ops:
     build: ./services/trip-ops
     ports: ["8002:8000"]
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
     environment:
       UI_ORIGIN: "${SCHOOLRUN_UI_ORIGIN:-http://localhost:8080}"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,trip-ops
       DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8001,http://127.0.0.1:8001
-      DATABASE_URL: "${TRIP_OPS_DATABASE_URL:?Set TRIP_OPS_DATABASE_URL}"
+      DATABASE_URL: "mssql://trip_ops_app:${TRIP_OPS_SQL_PASSWORD:?Set TRIP_OPS_SQL_PASSWORD}@sql:1433/schoolrun_trip_ops"
+      TOMTOM_API_KEY: "${TOMTOM_API_KEY:-}"
       SQL_EXTRA_PARAMS: "Encrypt=yes;TrustServerCertificate=yes"
   sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -32,5 +39,26 @@ services:
       - "127.0.0.1:1433:1433"
     volumes:
       - sql_data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - SQLCMDPASSWORD="$$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -l 3 -Q "SELECT 1" >/dev/null
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 20
+  sql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on:
+      sql:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: "${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD}"
+      ATTENDANCE_SQL_PASSWORD: "${ATTENDANCE_SQL_PASSWORD:?Set ATTENDANCE_SQL_PASSWORD}"
+      TRIP_OPS_SQL_PASSWORD: "${TRIP_OPS_SQL_PASSWORD:?Set TRIP_OPS_SQL_PASSWORD}"
+    volumes:
+      - ./db:/init:ro
+    entrypoint: ["/bin/sh", "/init/init.sh"]
 volumes:
   sql_data:
