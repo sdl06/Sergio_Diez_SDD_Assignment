@@ -22,6 +22,7 @@ services:
     env:
       PORT: {default: 8000, description: Gunicorn HTTP port.}
       DATABASE_URL: {secret: true, description: Connection URL for the Attendance SQL database.}
+      SQL_STARTUP: {default: '0', description: Startup script sets this to 1 for bounded transient connection retries during migrations.}
       SQL_EXTRA_PARAMS:
         default: Encrypt=yes;TrustServerCertificate=no
         description: ODBC connection options.
@@ -60,6 +61,7 @@ services:
     env:
       PORT: {default: 8000, description: Gunicorn HTTP port.}
       DATABASE_URL: {secret: true, description: Connection URL for the Trip Operations SQL database.}
+      SQL_STARTUP: {default: '0', description: Startup script sets this to 1 for bounded transient connection retries during migrations.}
       SQL_EXTRA_PARAMS:
         default: Encrypt=yes;TrustServerCertificate=no
         description: ODBC connection options.
