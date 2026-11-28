@@ -92,6 +92,12 @@ DATABASES = {
         "PASSWORD": unquote(database_url.password or ""),
         "OPTIONS": {
             "driver": "ODBC Driver 18 for SQL Server",
+            # Give a paused Azure database time to resume before applying migrations.
+            **(
+                {"connection_timeout": 12, "connection_retries": 9, "connection_retry_backoff_time": 8}
+                if os.environ.get("SQL_STARTUP") == "1"
+                else {}
+            ),
             "extra_params": os.environ.get(
                 "SQL_EXTRA_PARAMS",
                 "Encrypt=yes;TrustServerCertificate=no",
